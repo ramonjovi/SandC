@@ -31,7 +31,11 @@ export const AssessmentSchema = z.object({
     weeklyKm: z.number().min(0).default(0),
     longestRunKm: z.number().min(0).default(0),
     longestRunMin: num,
-    recentRace: z.object({ distanceM: z.number().positive(), timeSec: z.number().positive(), daysAgo: z.number().min(0) }).nullable().default(null),
+    recentRace: z.object({
+      distanceM: z.number().min(800, "Race distance is in metres: 5 km = 5000, 10 km = 10000.").max(100000, "Race distance is in metres: that looks too long."),
+      timeSec: z.number().min(120, "Race time looks too short: use m:ss or h:mm:ss."),
+      daysAgo: z.number().min(0),
+    }).nullable().default(null),
     breakDays: z.number().min(0).default(0),
     crossTrainedDuringBreak: bool,
     strengthTrainingYears: num,

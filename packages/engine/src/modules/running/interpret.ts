@@ -31,9 +31,17 @@ export function computeMetrics(a: RunnerAssessment): Metrics {
   const m: Metrics = {};
 
   let vdot: number | null = null;
+  let raceProblem: string | null = null;
   if (h.recentRace && h.recentRace.timeSec > 0) {
-    vdot = vdotFromRace(h.recentRace.distanceM, h.recentRace.timeSec);
+    const v = vdotFromRace(h.recentRace.distanceM, h.recentRace.timeSec);
+    // Real runners fall well inside 15-90. Anything else is almost always a typing slip (distance is in METRES: 5 km = 5000).
+    if (Number.isFinite(v) && v >= 15 && v <= 90) vdot = v;
+    else {
+      const kmh = Math.round((h.recentRace.distanceM / 1000 / (h.recentRace.timeSec / 3600)) * 10) / 10;
+      raceProblem = `The recent race entry looks wrong: ${h.recentRace.distanceM} m in ${fmtTime(h.recentRace.timeSec)} is ${kmh} km/h, which does not give a possible fitness score. The distance is in metres (5 km = 5000, 10 km = 10000) and the time is m:ss or h:mm:ss. Fix it and run the interpretation again; no paces or predicted times were calculated from it.`;
+    }
   }
+  m.raceEntryProblem = raceProblem;
   m.vdotRaw = vdot != null ? round1(vdot) : null;
   let vdotAdj = vdot;
   if (vdot != null && h.breakDays > 5) vdotAdj = vdot * breakMultiplier(h.breakDays, h.crossTrainedDuringBreak);
@@ -42,7 +50,7 @@ export function computeMetrics(a: RunnerAssessment): Metrics {
 
   let targetSpeedKmh: number | null = null;
   if (g.targetTimeSec && g.targetDistanceM) targetSpeedKmh = (g.targetDistanceM / 1000) / (g.targetTimeSec / 3600);
-  else if (h.recentRace) targetSpeedKmh = (h.recentRace.distanceM / 1000) / (h.recentRace.timeSec / 3600);
+  else if (h.recentRace && !raceProblem) targetSpeedKmh = (h.recentRace.distanceM / 1000) / (h.recentRace.timeSec / 3600);
   m.targetSpeedKmh = targetSpeedKmh != null ? round1(targetSpeedKmh) : null;
 
   const squat1RM = ph.squatLoadKg != null && ph.squatReps ? estimate1RM(ph.squatLoadKg, ph.squatReps) : null;
@@ -122,6 +130,9 @@ export function interpretRunner(a: RunnerAssessment, params: Params = defaultPar
       });
       used.add("running.strength.metabolic-neutral");
     }
+  } else if (m.raceEntryProblem) {
+    findings.push({ id: "race-entry", domain: "Running performance", severity: "attention", text: String(m.raceEntryProblem), ruleIds: ["running.vdot.formula"] });
+    missing.push("Recent race entry needs correcting (see the finding above).");
   } else missing.push("No recent race / time trial: current VDOT unknown. Consider a time trial to set paces.");
   if (h.recentRace && h.recentRace.daysAgo > 120) missing.push("Most recent race is older than 4 months; consider a time trial.");
 
