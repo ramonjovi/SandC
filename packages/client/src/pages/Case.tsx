@@ -16,6 +16,7 @@ export function CasePage() {
   const { data, error, reload } = useApi<any>(`/athletes/${id}`);
   const [tab, setTab] = useState<Tab>("assess");
   const [aid, setAid] = useState<string | null>(null);
+  const [invite, setInvite] = useState("");
 
   useEffect(() => { if (data && !aid) setAid(data.baselineId); }, [data, aid]);
   if (error) return <Alert tone="danger">{error.message}</Alert>;
@@ -24,7 +25,6 @@ export function CasePage() {
   const assessment = data.assessments.find((a: any) => a.id === aid) ?? data.assessments[0];
   const forAssessment = data.programs.filter((p: any) => p.assessmentId === assessment.id);
   const programRow = forAssessment.find((p: any) => p.status === "approved") ?? forAssessment.find((p: any) => p.status === "draft") ?? null;
-  const [invite, setInvite] = useState("");
   async function makeInvite() {
     const r = await api(`/athletes/${id}/invite`, { method: "POST", body: {} });
     setInvite(`${location.origin}/invite/${r.token}`);

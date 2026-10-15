@@ -70,6 +70,10 @@ export interface PhysicalTests {
   calfRaiseLeftReps: number | null;
   calfRaiseRightReps: number | null;
   nordicForceN: number | null;
+  /** Field tests (phone video). Flight/contact times in milliseconds; Nordic break angle in degrees from the floor. */
+  rsiFlightMs?: number | null;
+  rsiContactMs?: number | null;
+  nordicBreakAngleDeg?: number | null;
   notes: string;
 }
 

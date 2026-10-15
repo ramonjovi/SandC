@@ -206,3 +206,20 @@ export interface NextTarget {
   reason: string;
   ruleIds: string[];
 }
+
+/** A step-by-step field test, shown to clinicians (and used to keep tests identical between baseline and retest). */
+export interface TestProtocol {
+  id: string;
+  name: string;
+  purpose: string;
+  equipment: string[];
+  setup: string[];
+  steps: string[];
+  /** What to enter in the app. */
+  records: string;
+  safety?: string;
+  usedFor: string;
+  source: string | null;
+  status: RuleStatus;
+  note?: string;
+}

@@ -6,6 +6,7 @@ import { AuthProvider, RequireRole } from "./lib/auth";
 import { ClinicianLayout, Home } from "./pages/Clinician";
 import { CasePage } from "./pages/Case";
 import { RulesPage } from "./pages/Rules";
+import { ProtocolsPage } from "./pages/Protocols";
 import { AthleteApp } from "./pages/Athlete";
 import { AdminPage, ChangePassword, InvitePage, LoginPage } from "./pages/Account";
 
@@ -21,6 +22,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/" element={<Home />} />
             <Route path="/c/:id" element={<CasePage />} />
             <Route path="/rules" element={<RulesPage />} />
+            <Route path="/protocols" element={<ProtocolsPage />} />
             <Route path="/account" element={<ChangePassword />} />
             <Route path="/admin" element={<RequireRole roles={["admin"]}><AdminPage /></RequireRole>} />
           </Route>

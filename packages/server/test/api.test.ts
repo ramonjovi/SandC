@@ -225,6 +225,20 @@ describe("full vertical slice (Alex)", () => {
   });
 });
 
+describe("field tests without a force plate", () => {
+  it("stores the phone-video fields and exposes protocols to clinicians", async () => {
+    const a = await newAthlete(SYNTHETIC_ALEX);
+    const data = { ...SYNTHETIC_ALEX, physical: { ...SYNTHETIC_ALEX.physical, imtpPeakForceN: null, cmjPeakForceN: null, rsiFlightMs: 150, rsiContactMs: 190, nordicBreakAngleDeg: 30 } };
+    await pt.put(`/api/assessments/${a.assessmentId}`).send({ data }).expect(200);
+    const rep = await pt.post(`/api/assessments/${a.assessmentId}/interpret`).expect(201);
+    expect(rep.body.metrics.rsi).toBeCloseTo(0.79, 2);
+    const d = await pt.get(`/api/athletes/${a.id}`);
+    expect(d.body.assessments[0].data.physical.rsiFlightMs).toBe(150);
+    const meta = await pt.get("/api/meta").expect(200);
+    expect(meta.body.modules[0].protocols.length).toBeGreaterThanOrEqual(8);
+  });
+});
+
 describe("safety gate (Sam)", () => {
   it("requires a recorded medical review note when screening flags exist", async () => {
     const a = await newAthlete(SYNTHETIC_SAM);

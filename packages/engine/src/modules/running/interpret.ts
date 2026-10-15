@@ -56,6 +56,8 @@ export function computeMetrics(a: RunnerAssessment): Metrics {
   const l = ph.calfRaiseLeftReps, r = ph.calfRaiseRightReps;
   m.calfRaiseAvg = l != null && r != null ? round1((l + r) / 2) : l ?? r ?? null;
   m.calfRaiseAsymPct = l != null && r != null && Math.max(l, r) > 0 ? round1((Math.abs(l - r) / Math.max(l, r)) * 100) : null;
+  m.rsi = ph.rsiFlightMs != null && ph.rsiContactMs ? round2(ph.rsiFlightMs / ph.rsiContactMs) : null;
+  m.nordicBreakAngleDeg = ph.nordicBreakAngleDeg ?? null;
   m.cadenceSpm = b.cadenceSpm;
   m.trainingTier = trainingTier(h.strengthTrainingYears);
   return m;
@@ -150,7 +152,24 @@ export function interpretRunner(a: RunnerAssessment, params: Params = defaultPar
     used.add("running.dsi");
     if (dsiState === "strength") addPri("max_strength", 95, `DSI ${dsi} < ${dsiLo} suggests force output is limited by maximal strength.`, ["running.dsi", "running.strength.high-load"]);
     if (dsiState === "power") addPri("power_rfd", 95, `DSI ${dsi} > ${dsiHi} suggests strength is available but not expressed quickly.`, ["running.dsi", "running.strength.plyometric"]);
-  } else missing.push("CMJ and IMTP peak force not both entered: DSI unavailable, so strength-vs-power emphasis relies on squat ratio and running speed.");
+  } else {
+    const fieldTests = [m.cmjHeightCm, m.broadJumpM, m.rsi].filter((v) => v != null).length;
+    missing.push(`DSI unavailable (it needs a force plate and is optional). Strength-vs-power emphasis uses the squat strength ratio, then target running speed. ${fieldTests ? "Field power tests are tracked for change only (no validated runner cutoffs)." : "Enter CMJ height, broad jump or pogo-hop RSI so power can be tracked."}`);
+  }
+  if (ph.squatReps != null && ph.squatReps > 5) {
+    findings.push({ id: "squat-reps", domain: "Physical capacity", severity: "attention", text: `The squat test used ${ph.squatReps} reps. Estimating 1RM from higher reps is less accurate and tends to overestimate, so starting loads may be too high: retest with a 3-5RM or confirm loads in week 1.`, ruleIds: ["running.test.squat-protocol"] });
+    used.add("running.test.squat-protocol");
+  }
+  // Field power tests: tracked for change, never judged against a cutoff.
+  const fieldNotes: string[] = [];
+  if (m.cmjHeightCm != null) fieldNotes.push(`CMJ height ${m.cmjHeightCm} cm`);
+  if (m.broadJumpM != null) fieldNotes.push(`broad jump ${m.broadJumpM} m`);
+  if (m.rsi != null) fieldNotes.push(`pogo-hop RSI ${m.rsi} (flight ${ph.rsiFlightMs} ms / contact ${ph.rsiContactMs} ms)`);
+  if (ph.nordicBreakAngleDeg != null) fieldNotes.push(`Nordic break angle ${ph.nordicBreakAngleDeg} deg from floor`);
+  if (fieldNotes.length) {
+    findings.push({ id: "field-tests", domain: "Physical capacity", severity: "info", text: `Field tests recorded: ${fieldNotes.join("; ")}. These are baselines to track change; there are no validated runner cutoffs, so they are not used to judge the athlete.`, ruleIds: ["running.field-tests.tracking"] });
+    used.add("running.field-tests.tracking");
+  }
 
   // Calf-soleus: universal software default
   used.add("running.program.soleus");

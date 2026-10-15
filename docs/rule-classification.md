@@ -39,3 +39,12 @@ The authoritative list is `packages/engine/src/core/rules.ts` and `packages/engi
 2. DSI bands; squat strength ratios (NSCA Essentials); SEBT 4 cm; calf-asymmetry 10%.
 3. NSCA/HPT source for the 80-90% x 3-6 prescription and the unload cut (40-50%).
 4. Race-week lifting cut-off (4-5 days).
+
+## Field-test battery (no force plate): verification notes
+
+| Item | Result |
+| --- | --- |
+| Squat 3-5RM protocol | NSCA Essentials ch. 18: 3RM/5RM suits nearly all athletes with sound technique, is safer than 1RM for novices, finds the load within 3-5 sets, and 1RM estimates from higher reps are less accurate (tend to overestimate). Load steps (10-20% lower body) and 2-4 min rests taken from its protocol. **Source-verified.** The engine now warns if the test used more than 5 reps. |
+| Treadmill gait video | Souza 2016: speed = the symptomatic speed, or long-run pace for a healthy runner (**not race pace** as the knowledge file said); 6-10 min settling; two orthogonal views (side, rear); >=120 Hz phone is adequate; fixed, reproducible camera position; film fatigued if symptoms appear later. **Source-verified.** |
+| CMJ height from phone video, broad jump, pogo-hop RSI, calf-raise tempo, SEBT taping, Nordic break angle | No standardised procedure in the supplied texts. Proposed clinic standards, labelled **needs verification**; tracked against the athlete's own baseline, never against a norm. |
+| Force plate (IMTP, CMJ force, DSI) | Optional. Without it the engine uses the squat strength ratio, then target speed. |

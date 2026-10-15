@@ -6,7 +6,7 @@ import { formatTime, parseTime } from "@/lib/utils";
 type Kind = "num" | "text" | "area" | "bool" | "tri" | "select" | "time" | "date";
 interface FieldDef { path: string; label: string; kind: Kind; options?: Array<[string, string]>; unit?: string; wide?: boolean }
 
-const SECTIONS: Array<{ title: string; hint?: string; fields: FieldDef[] }> = [
+const SECTIONS: Array<{ title: string; hint?: string; collapsed?: boolean; fields: FieldDef[] }> = [
   { title: "Profile", fields: [
     { path: "profile.name", label: "Name", kind: "text" },
     { path: "profile.sex", label: "Sex", kind: "select", options: [["male", "Male"], ["female", "Female"], ["other", "Other"]] },
@@ -45,7 +45,7 @@ const SECTIONS: Array<{ title: string; hint?: string; fields: FieldDef[] }> = [
     { path: "health.dxaZScore", label: "DXA Z-score (if available)", kind: "num" },
     { path: "health.notes", label: "Notes", kind: "area", wide: true },
   ] },
-  { title: "Running video observations (2D)", hint: "Observations only: no validated injury cutoffs exist.", fields: [
+  { title: "Running video observations (2D)", hint: "Observations only: no validated injury cutoffs exist. Treadmill at the symptomatic speed (or long-run pace), 6-10 min settling, side and rear views: see Test protocols.", fields: [
     { path: "biomechanics.footStrike", label: "Foot strike", kind: "select", options: [["", "—"], ["rearfoot", "Rearfoot"], ["midfoot", "Midfoot"], ["forefoot", "Forefoot"]] },
     { path: "biomechanics.cadenceSpm", label: "Cadence", kind: "num", unit: "spm" },
     { path: "biomechanics.overstride", label: "Overstride (malleolus ahead of pelvis)", kind: "tri" },
@@ -58,18 +58,23 @@ const SECTIONS: Array<{ title: string; hint?: string; fields: FieldDef[] }> = [
     { path: "biomechanics.heelWhip", label: "Heel whip", kind: "tri" },
     { path: "biomechanics.notes", label: "Notes", kind: "area", wide: true },
   ] },
-  { title: "Physical testing", hint: "A squat test (load x reps) lets the engine calculate loads. Reps = 1 means a true 1RM.", fields: [
-    { path: "physical.squatLoadKg", label: "Squat test load", kind: "num", unit: "kg" },
-    { path: "physical.squatReps", label: "Squat test reps", kind: "num" },
-    { path: "physical.imtpPeakForceN", label: "IMTP peak force", kind: "num", unit: "N" },
-    { path: "physical.cmjPeakForceN", label: "CMJ peak force", kind: "num", unit: "N" },
-    { path: "physical.cmjHeightCm", label: "CMJ height", kind: "num", unit: "cm" },
-    { path: "physical.broadJumpM", label: "Broad jump", kind: "num", unit: "m" },
-    { path: "physical.sebtAsymmetryCm", label: "SEBT / Y-balance asymmetry", kind: "num", unit: "cm" },
+  { title: "Physical testing (treadmill, barbell, rack, phone)", hint: "How to run each test: see Test protocols. Keep every test identical at retest. Power tests are tracked for change, not judged against norms.", fields: [
+    { path: "physical.squatLoadKg", label: "Squat 3-5RM load", kind: "num", unit: "kg" },
+    { path: "physical.squatReps", label: "Squat test reps (5 or fewer)", kind: "num" },
+    { path: "physical.cmjHeightCm", label: "CMJ height (avg of 3, from video)", kind: "num", unit: "cm" },
+    { path: "physical.broadJumpM", label: "Standing broad jump (best of 3)", kind: "num", unit: "m" },
+    { path: "physical.rsiFlightMs", label: "Pogo hops: average flight time", kind: "num", unit: "ms" },
+    { path: "physical.rsiContactMs", label: "Pogo hops: average contact time", kind: "num", unit: "ms" },
     { path: "physical.calfRaiseLeftReps", label: "Single-leg calf raise, left", kind: "num", unit: "reps" },
     { path: "physical.calfRaiseRightReps", label: "Single-leg calf raise, right", kind: "num", unit: "reps" },
-    { path: "physical.nordicForceN", label: "Nordic eccentric force", kind: "num", unit: "N" },
+    { path: "physical.sebtAsymmetryCm", label: "SEBT / Y-balance largest L-R difference", kind: "num", unit: "cm" },
+    { path: "physical.nordicBreakAngleDeg", label: "Nordic break angle (from video)", kind: "num", unit: "deg from floor" },
     { path: "physical.notes", label: "Notes", kind: "area", wide: true },
+  ] },
+  { title: "Optional: force plate tests", collapsed: true, hint: "Leave blank if no force plate. Needed only for the Dynamic Strength Index.", fields: [
+    { path: "physical.imtpPeakForceN", label: "IMTP peak force", kind: "num", unit: "N" },
+    { path: "physical.cmjPeakForceN", label: "CMJ peak force", kind: "num", unit: "N" },
+    { path: "physical.nordicForceN", label: "Nordic eccentric force", kind: "num", unit: "N" },
   ] },
 ];
 
@@ -132,19 +137,25 @@ export function AssessmentForm({ assessment, onSaved, onInterpreted }: { assessm
   return (
     <div className="space-y-4">
       {assessment.kind === "reassessment" && <Alert>Reassessment: update the values that were retested, then save.</Alert>}
-      {SECTIONS.map((s) => (
-        <Card key={s.title}>
-          <CardHeader><CardTitle>{s.title}</CardTitle>{s.hint && <p className="text-xs text-muted-foreground">{s.hint}</p>}</CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {s.fields.map((f) => (
-              <div key={f.path} className={f.wide ? "sm:col-span-2 lg:col-span-3" : ""}>
-                <Label>{f.label}{f.unit ? ` (${f.unit})` : ""}</Label>
-                {control(f)}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ))}
+      {SECTIONS.map((s) => {
+        const body = (
+          <>
+            <CardHeader><CardTitle>{s.title}</CardTitle>{s.hint && <p className="text-xs text-muted-foreground">{s.hint}</p>}</CardHeader>
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {s.fields.map((f) => (
+                <div key={f.path} className={f.wide ? "sm:col-span-2 lg:col-span-3" : ""}>
+                  <Label>{f.label}{f.unit ? ` (${f.unit})` : ""}</Label>
+                  {control(f)}
+                </div>
+              ))}
+              {s.title.startsWith("Physical testing") && <Calculators data={data} />}
+            </CardContent>
+          </>
+        );
+        return s.collapsed
+          ? <details key={s.title} className="rounded-xl border bg-card"><summary className="cursor-pointer p-4 text-sm font-semibold sm:p-5">{s.title}</summary>{body}</details>
+          : <Card key={s.title}>{body}</Card>;
+      })}
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       <div className="sticky bottom-3 flex flex-wrap gap-2 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur">
         <Button variant="outline" disabled={busy} onClick={() => save(false)}>Save</Button>
@@ -158,4 +169,25 @@ function TimeInput({ value, onChange }: { value: number | null | undefined; onCh
   const [txt, setTxt] = useState(formatTime(value));
   useEffect(() => { setTxt(formatTime(value)); }, [value]);
   return <Input placeholder="m:ss or h:mm:ss" value={txt} onChange={(e) => setTxt(e.target.value)} onBlur={() => onChange(parseTime(txt))} />;
+}
+
+/** Small calculators for the phone-video tests. They only show numbers; the clinician types the result into the fields above. */
+function Calculators({ data }: { data: any }) {
+  const [frames, setFrames] = useState("");
+  const [fps, setFps] = useState("240");
+  const flight = frames && fps ? Number(frames) / Number(fps) : null;
+  const height = flight != null && Number.isFinite(flight) ? Math.round(122.6 * flight * flight * 10) / 10 : null;
+  const f = data.physical?.rsiFlightMs, c = data.physical?.rsiContactMs;
+  const rsi = f != null && c ? Math.round((f / c) * 100) / 100 : null;
+  return (
+    <div className="space-y-3 rounded-lg bg-muted/50 p-3 text-sm sm:col-span-2 lg:col-span-3">
+      <div className="font-medium">Calculators</div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div><Label>Jump: frames in the air</Label><Input type="number" value={frames} onChange={(e) => setFrames(e.target.value)} /></div>
+        <div><Label>Video frame rate (fps)</Label><Input type="number" value={fps} onChange={(e) => setFps(e.target.value)} /></div>
+        <div className="flex items-end"><span>{height != null ? <>Flight {Math.round((flight as number) * 1000)} ms, <b>height {height} cm</b></> : "Enter frames to get height"}</span></div>
+      </div>
+      <div>Pogo-hop RSI (flight ÷ contact): <b>{rsi ?? "enter both times above"}</b></div>
+    </div>
+  );
 }

@@ -229,7 +229,7 @@ export function createApp(db: Db) {
   clinician.get("/meta", (_req, res) => {
     res.json({
       rules: allRules(),
-      modules: listModules().map((m) => ({ id: m.id, name: m.name, priorities: m.priorityKeys() })),
+      modules: listModules().map((m) => ({ id: m.id, name: m.name, priorities: m.priorityKeys(), protocols: m.protocols ?? [] })),
     });
   });
 

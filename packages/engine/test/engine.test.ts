@@ -392,3 +392,73 @@ describe("editable rule defaults (overrides)", () => {
     expect(makeParams([{ id: "x", title: "", status: "proposed_default", source: null, statement: "", verification: "", defaults: { a: 1 } }]).get("x", "a")).toBe(1);
   });
 });
+
+describe("no force plate (treadmill, barbell, phone)", () => {
+  const noPlate = {
+    ...SYNTHETIC_ALEX,
+    physical: { ...SYNTHETIC_ALEX.physical, imtpPeakForceN: null, cmjPeakForceN: null, nordicForceN: null, rsiFlightMs: 160, rsiContactMs: 200, nordicBreakAngleDeg: 35 },
+  };
+  const rep = interpretRunner(noPlate);
+  it("still interprets and chooses a strategy without DSI", () => {
+    expect(rep.metrics.dsi).toBeNull();
+    expect(rep.strategy.emphasis).toBe("strength"); // falls back to squat ratio then speed tilt
+    expect(rep.missingData.join(" ")).toMatch(/DSI unavailable.*force plate/);
+  });
+  it("computes RSI and records field tests as tracked-only findings", () => {
+    expect(rep.metrics.rsi).toBeCloseTo(0.8, 2);
+    const f = rep.findings.find((x) => x.id === "field-tests")!;
+    expect(f.text).toMatch(/no validated runner cutoffs/);
+    expect(f.text).toMatch(/RSI 0.8/);
+    expect(rep.priorities.some((p) => p.key === "power_rfd")).toBe(false);
+  });
+  it("warns when the squat test used more than 5 reps", () => {
+    const hi = { ...noPlate, physical: { ...noPlate.physical, squatReps: 8 } };
+    const r = interpretRunner(hi);
+    expect(r.findings.some((x) => x.id === "squat-reps")).toBe(true);
+    expect(rep.findings.some((x) => x.id === "squat-reps")).toBe(false);
+  });
+  it("adds field-test objectives and a retest list to the milestones", () => {
+    const p = generateRunnerProgram(noPlate, rep);
+    const ids = p.objectives.map((o) => o.id);
+    expect(ids).toEqual(expect.arrayContaining(["cmj", "rsi", "broadJump"]));
+    expect(ids).not.toContain("imtpRel");
+    const detail = p.milestones.find((m) => m.id === "m3")!.detail;
+    expect(detail).toMatch(/Squat 3-5RM/);
+    expect(detail).toMatch(/Pogo-hop RSI/);
+    expect(detail).not.toMatch(/IMTP/);
+  });
+  it("field-test targets follow clinician-edited defaults", () => {
+    const params = running.runningParams({ "running.field-tests.tracking": { cmjPct: 10 } });
+    const p = generateRunnerProgram(noPlate, interpretRunner(noPlate, params), { params });
+    const o = p.objectives.find((x) => x.id === "cmj")!;
+    expect(o.target).toBeCloseTo(o.baseline! * 1.1, 1);
+  });
+});
+
+describe("test protocols", () => {
+  const prots = running.RUNNING_PROTOCOLS;
+  it("every protocol has equipment, steps, what to record and a valid status", () => {
+    for (const x of prots) {
+      expect(x.equipment.length, x.id).toBeGreaterThan(0);
+      expect(x.steps.length, x.id).toBeGreaterThan(0);
+      expect(x.records.length, x.id).toBeGreaterThan(0);
+      expect(["source_verified", "proposed_default", "needs_verification"]).toContain(x.status);
+    }
+    expect(new Set(prots.map((x) => x.id)).size).toBe(prots.length);
+  });
+  it("needs no force plate except the clearly optional one", () => {
+    const plate = prots.filter((x) => x.equipment.join(" ").toLowerCase().includes("force plate"));
+    expect(plate.map((x) => x.id)).toEqual(["force-plate-optional"]);
+  });
+  it("squat and treadmill-gait protocols are source-verified; the video power tests are not", () => {
+    const st = (id: string) => prots.find((x) => x.id === id)!.status;
+    expect(st("squat-rm")).toBe("source_verified");
+    expect(st("gait-treadmill")).toBe("source_verified");
+    expect(st("cmj-video")).toBe("needs_verification");
+    expect(st("rsi-pogo")).toBe("needs_verification");
+  });
+  it("retest list reflects only what was measured", () => {
+    expect(running.retestList(SYNTHETIC_SAM.physical)).not.toContain("IMTP and CMJ force");
+    expect(running.retestList(SYNTHETIC_ALEX.physical)).toContain("IMTP and CMJ force");
+  });
+});

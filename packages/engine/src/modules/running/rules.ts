@@ -299,4 +299,28 @@ export const RUNNING_RULES: Rule[] = [
     statement: "Finish heavy lower-body and plyometric work at least 4-5 days before the race.",
     verification: "The 4-5 day figure was not found in the supplied books. Used as an editable default.",
   },
+  {
+    id: "running.test.squat-protocol",
+    title: "Squat testing: 3-5RM, within 3-5 sets",
+    status: "source_verified",
+    source: "NSCA Essentials of Strength Training and Conditioning, ch. 18",
+    statement:
+      "A 3RM or 5RM test (then estimating the 1RM) suits nearly all athletes with sound technique and is safer than a 1RM for novices; 1RM prediction becomes less accurate, and tends to overestimate, as reps rise; testing should find the target load within 3-5 sets.",
+    verification: "Read in the book text. The engine warns when a squat test used more than 5 reps.",
+  },
+  {
+    id: "running.field-tests.tracking",
+    title: "Field power tests are tracked for change",
+    status: "proposed_default",
+    source: "Software design; knowledge file 01 lists the broad jump as the no-force-plate substitute",
+    statement:
+      "Without a force plate, power is tracked with CMJ height from video, broad jump and pogo-hop RSI. No validated runner cutoffs exist in the supplied texts, so these are compared with the athlete's own baseline, never against a norm. Objective targets below are editable.",
+    verification: "Targets are software defaults. CMJ-from-video and pogo RSI procedures are standard practice but not described in the supplied texts.",
+    defaults: { cmjPct: 5, rsiPct: 10, broadJumpPct: 3 },
+    paramMeta: {
+      cmjPct: { label: "CMJ height target increase", min: 1, max: 20, step: 1, unit: "%" },
+      rsiPct: { label: "Pogo-hop RSI target increase", min: 1, max: 30, step: 1, unit: "%" },
+      broadJumpPct: { label: "Broad jump target increase", min: 1, max: 15, step: 1, unit: "%" },
+    },
+  },
 ];

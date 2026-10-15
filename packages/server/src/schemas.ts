@@ -68,6 +68,9 @@ export const AssessmentSchema = z.object({
     calfRaiseLeftReps: num,
     calfRaiseRightReps: num,
     nordicForceN: num,
+    rsiFlightMs: num,
+    rsiContactMs: num,
+    nordicBreakAngleDeg: num,
     notes: z.string().default(""),
   }).default({}),
 });

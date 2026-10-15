@@ -22,6 +22,7 @@ export function ClinicianLayout() {
           <Link to="/" className="flex items-center gap-2 font-semibold"><Activity className="h-5 w-5 text-primary" /> TPC Performance OS</Link>
           <Badge variant="outline" className="hidden sm:inline-flex">{user?.role}</Badge>
           <div className="ml-auto flex items-center gap-3 text-sm">
+            <Link to="/protocols" className="text-muted-foreground hover:text-foreground">Test protocols</Link>
             <Link to="/rules" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"><BookOpenCheck className="h-4 w-4" /> Rules</Link>
             {user?.role === "admin" && <Link to="/admin" className="text-muted-foreground hover:text-foreground">Team</Link>}
             <Link to="/account" className="text-muted-foreground hover:text-foreground">{user?.name}</Link>

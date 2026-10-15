@@ -7,6 +7,7 @@ import { computeMetrics } from "./interpret";
 import type { Params } from "../../core/params";
 import { defaultParams } from "./params";
 import { tierLimits, trainingTier, type TrainingTier } from "./tier";
+import { retestList } from "./protocols";
 import type { RunnerAssessment, RunnerProgramOpts } from "./types";
 
 interface WeekPlan {
@@ -237,14 +238,14 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
     return { week: w.week, phase, label, isUnload: w.unload || taper, note, sessions };
   });
 
-  const { objectives, milestones } = buildObjectivesAndMilestones(a, report, metrics, duration, raceWeek, tier, params.get("running.gait.cadence", "cadenceIncreasePct"));
+  const { objectives, milestones } = buildObjectivesAndMilestones(a, report, metrics, duration, raceWeek, tier, params.get("running.gait.cadence", "cadenceIncreasePct"), { cmj: params.get("running.field-tests.tracking", "cmjPct"), rsi: params.get("running.field-tests.tracking", "rsiPct"), bj: params.get("running.field-tests.tracking", "broadJumpPct") });
   return {
     moduleId: "running", generatedAt: new Date().toISOString(), durationWeeks: duration,
     strategy: report.strategy, weeks, objectives, milestones, assumptions, restrictionsApplied, trainingTier: tier, rulesUsed: [...rulesUsed], paramOverrides: params.overrides(),
   };
 }
 
-function buildObjectivesAndMilestones(a: RunnerAssessment, report: EngineReport, m: ReturnType<typeof computeMetrics>, weeks: number, raceWeek: number | null, tier: TrainingTier, cadencePct: number) {
+function buildObjectivesAndMilestones(a: RunnerAssessment, report: EngineReport, m: ReturnType<typeof computeMetrics>, weeks: number, raceWeek: number | null, tier: TrainingTier, cadencePct: number, fieldPct: { cmj: number; rsi: number; bj: number }) {
   const objectives: Objective[] = [];
   const num = (k: string) => (typeof m[k] === "number" ? (m[k] as number) : null);
   const add = (o: Objective) => objectives.push(o);
@@ -258,6 +259,12 @@ function buildObjectivesAndMilestones(a: RunnerAssessment, report: EngineReport,
   if (dsi != null && (dsi < 0.6 || dsi > 0.8)) add({ id: "dsi", label: "Dynamic Strength Index", metric: "dsi", unit: "ratio", baseline: dsi, target: 0.7, rationale: "Move toward the 0.60-0.80 balanced band (band itself needs verification).", status: "needs_verification" });
   const calf = num("calfRaiseAvg");
   if (calf != null) add({ id: "calfRaiseAvg", label: "Single-leg calf raise (average reps)", metric: "calfRaiseAvg", unit: "reps", baseline: calf, target: r1(calf * 1.2), rationale: "+20% (editable default).", status: "proposed_default" });
+  const cmj = num("cmjHeightCm");
+  if (cmj != null) add({ id: "cmj", label: "CMJ height (phone video)", metric: "cmjHeightCm", unit: "cm", baseline: cmj, target: r1(cmj * (1 + fieldPct.cmj / 100)), rationale: `+${fieldPct.cmj}% (editable default). Tracked against the athlete's own baseline; no runner cutoffs exist.`, status: "proposed_default" });
+  const rsi = num("rsi");
+  if (rsi != null) add({ id: "rsi", label: "Pogo-hop reactive strength index", metric: "rsi", unit: "ratio", baseline: rsi, target: Math.round(rsi * (1 + fieldPct.rsi / 100) * 100) / 100, rationale: `+${fieldPct.rsi}% (editable default). Keep hop count, surface and frame rate identical.`, status: "proposed_default" });
+  const bj = num("broadJumpM");
+  if (bj != null) add({ id: "broadJump", label: "Standing broad jump", metric: "broadJumpM", unit: "m", baseline: bj, target: Math.round(bj * (1 + fieldPct.bj / 100) * 100) / 100, rationale: `+${fieldPct.bj}% (editable default).`, status: "proposed_default" });
   const sebt = num("sebtAsymmetryCm");
   if (sebt != null && sebt > 4) add({ id: "sebt", label: "SEBT asymmetry", metric: "sebtAsymmetryCm", unit: "cm", baseline: sebt, target: 4, lowerIsBetter: true, rationale: "Bring side-to-side difference to 4 cm or less (default flag).", status: "needs_verification" });
   const cad = num("cadenceSpm");
@@ -265,10 +272,11 @@ function buildObjectivesAndMilestones(a: RunnerAssessment, report: EngineReport,
   const pred = num("goalPredictedTimeSec");
   if (pred != null && a.goals.targetTimeSec) add({ id: "goal", label: `${a.goals.event} race goal`, metric: "goalPredictedTimeSec", unit: "s", baseline: pred, target: a.goals.targetTimeSec, lowerIsBetter: true, rationale: "Predicted time from current VDOT vs. athlete goal. Strength training supports economy; fitness gains come from the running plan.", status: "source_verified" });
 
+  const retest = retestList(a.physical).join(", ") || "all baseline tests";
   const milestones: Milestone[] = [{ id: "m1", week: 1, label: "Baseline and load check", detail: "Confirm every starting load gives the target RIR; edit as needed." }];
   const mid = Math.min(tier === "novice" ? 6 : 4, weeks - 1);
-  if (mid >= 3 && mid < weeks - 1) milestones.push({ id: "m2", week: mid, label: "Unload week + mid-block reassessment", detail: "Retest squat/IMTP/CMJ and review VDOT (3-4 week cycle). Review all objectives." });
-  if (raceWeek == null) milestones.push({ id: "m3", week: weeks, label: "End-of-block reassessment", detail: "Full retest, compare to baseline, decide next block." });
+  if (mid >= 3 && mid < weeks - 1) milestones.push({ id: "m2", week: mid, label: "Unload week + mid-block reassessment", detail: `Retest: ${retest}. Review VDOT (3-4 week cycle) and all objectives.` });
+  if (raceWeek == null) milestones.push({ id: "m3", week: weeks, label: "End-of-block reassessment", detail: `Full retest (${retest}), compare to baseline, decide next block.` });
   else {
     milestones.push({ id: "m3", week: Math.max(2, raceWeek - 2), label: "Taper begins", detail: "Cut gym volume, keep intensity, keep running frequency." });
     milestones.push({ id: "m4", week: raceWeek, label: `Race: ${a.goals.event}`, detail: `Target date ${a.goals.raceDate}. Reassess after recovery.` });
