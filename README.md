@@ -36,6 +36,12 @@ With no `DATABASE_URL`, the server uses embedded Postgres (PGlite, stored in `pa
 - **Trend charts:** per-goal charts (baseline, each retest, target), heaviest set per session, and weekly running volume. Every chart has a table view and a hover tooltip.
 - **PDF reports:** Progress tab → "Create PDF report for athlete" → choose Baseline or Progress update, tick the sections, add notes, then Print and choose "Save as PDF" (turn off headers and footers). Screening answers and engine reasoning are never included.
 
+## Using it on your own computer (Windows)
+
+1. **Start:** double-click `start.bat`. It backs up your data, builds the app, opens http://localhost:3001 and runs it. Keep that window open while you work; closing it stops the app.
+2. **First time only, your own account** (close the app first): `npm run make-admin` asks for your email, name and password (typed hidden). Then `npm run remove-demo` removes the `*@tpc.demo` logins and the two synthetic demo athletes. It keeps every real athlete and refuses to run until you have your own account. Demo data is only ever created on a completely empty database, so it will not come back.
+3. **Backups:** `start.bat` makes one before each start and keeps the newest 14 in the `backups` folder (not uploaded to GitHub). Copy that folder to a USB drive or cloud drive now and then: a backup on the same computer does not protect you if the computer is lost. `npm run restore` lists them; `npm run restore -- <name>` puts one back (your current data is kept aside first). The tools refuse to run while the app is open.
+
 ## Deploy (Railway)
 
 Add a PostgreSQL service, then set `DATABASE_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` (10+ characters; creates the first admin when no users exist; rotate it after first sign-in). Build: `npm install && npm run build`. Start: `npm start`. The server runs migrations on boot and serves the built client.

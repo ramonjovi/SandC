@@ -11,6 +11,7 @@ import {
   type EngineReport, type PtInterpretation, type Program, type PrescribedExercise, type SessionLog,
 } from "@tpc/engine";
 import { schema, type Db } from "./db";
+import { purgeAthlete } from "./lifecycle";
 import {
   AuthError, attachUser, endSession, hashPassword, makeLimiter, newToken, passwordProblem, requireCsrfHeader, requireRole, sha256,
   startSession, verifyPassword,
@@ -382,21 +383,7 @@ export function createApp(db: Db) {
     if (!a.archivedAt) throw new HttpError(409, "Archive the athlete first, then delete permanently.");
     if (String(req.body?.confirmName ?? "") !== a.name) throw new HttpError(400, "The typed name does not match. Nothing was deleted.");
     const actor = actorOf(req);
-    await db.transaction(async (tx) => {
-      const accountIds = (await tx.select({ id: users.id }).from(users).where(eq(users.athleteId, athleteId))).map((u) => u.id);
-      for (const uid of accountIds) await tx.delete(schema.sessions).where(eq(schema.sessions.userId, uid));
-      await tx.delete(sessionLogs).where(eq(sessionLogs.athleteId, athleteId));
-      await tx.delete(weeklyLogs).where(eq(weeklyLogs.athleteId, athleteId));
-      await tx.delete(programs).where(eq(programs.athleteId, athleteId));
-      await tx.delete(ptInterpretations).where(eq(ptInterpretations.athleteId, athleteId));
-      await tx.delete(engineReports).where(eq(engineReports.athleteId, athleteId));
-      await tx.delete(assessments).where(eq(assessments.athleteId, athleteId));
-      await tx.delete(invites).where(eq(invites.athleteId, athleteId));
-      await tx.delete(users).where(eq(users.athleteId, athleteId));
-      await tx.delete(athletes).where(eq(athletes.id, athleteId));
-      // Keep who/what/when, but wipe the content (assessment snapshots etc.) from this athlete's audit rows.
-      await tx.update(auditLog).set({ detail: null, athleteId: null }).where(eq(auditLog.athleteId, athleteId));
-    });
+    await purgeAthlete(db, athleteId);
     await audit(actor, "delete-athlete", "athlete", athleteId, null, { name: a.name, note: "Permanently deleted with all records." });
     res.json({ ok: true });
   }));

@@ -32,7 +32,7 @@ export async function openDb(opts: { memory?: boolean } = {}): Promise<DbHandle>
   const { PGlite } = await import("@electric-sql/pglite");
   const { drizzle } = await import("drizzle-orm/pglite");
   const { migrate } = await import("drizzle-orm/pglite/migrator");
-  const dir = opts.memory ? undefined : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.pglite");
+  const dir = opts.memory ? undefined : process.env.TPC_DATA_DIR ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.pglite");
   const client = new PGlite(dir);
   const db = drizzle(client, { schema });
   await migrate(db, { migrationsFolder });

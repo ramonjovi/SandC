@@ -13,7 +13,11 @@
     "build": "npm run build -w @tpc/client",
     "start": "npm run start -w @tpc/server",
     "db:generate": "npm run db:generate -w @tpc/server",
-    "seed": "npm run seed -w @tpc/server"
+    "seed": "npm run seed -w @tpc/server",
+    "backup": "npm run backup -w @tpc/server --silent",
+    "restore": "npm run restore -w @tpc/server --",
+    "make-admin": "npm run make-admin -w @tpc/server",
+    "remove-demo": "npm run remove-demo -w @tpc/server"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

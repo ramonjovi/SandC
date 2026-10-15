@@ -6,8 +6,7 @@ const { db } = await openDb();
 const prod = Boolean(process.env.DATABASE_URL);
 await bootstrapAdmin(db);
 if (!prod && process.env.SEED_DEMO !== "false") {
-  await seedIfEmpty(db);
-  console.log(`Demo logins (synthetic data, dev only), password "${DEMO_PASSWORD}": ${Object.values(DEMO_USERS).join(", ")}`);
+  if (await seedIfEmpty(db)) console.log(`Demo logins (synthetic data, dev only), password "${DEMO_PASSWORD}": ${Object.values(DEMO_USERS).join(", ")}`);
 }
 const port = Number(process.env.PORT ?? 3001);
 const app = createApp(db);

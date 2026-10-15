@@ -9,7 +9,11 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "seed": "tsx src/seed.ts"
+    "seed": "tsx src/seed.ts",
+    "backup": "tsx src/cli/backup.ts",
+    "restore": "tsx src/cli/restore.ts",
+    "make-admin": "tsx src/cli/make-admin.ts",
+    "remove-demo": "tsx src/cli/remove-demo.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.12",

@@ -27,8 +27,9 @@ export async function bootstrapAdmin(db: Db) {
 }
 
 /** Seeds SYNTHETIC users and athletes by exercising the real HTTP API end to end. */
-export async function seedIfEmpty(db: Db) {
-  if ((await db.select().from(schema.athletes).limit(1)).length) return;
+export async function seedIfEmpty(db: Db): Promise<boolean> {
+  // Only on a completely empty database: once any account exists (yours included) the demo data is never created again.
+  if ((await db.select().from(schema.users).limit(1)).length || (await db.select().from(schema.athletes).limit(1)).length) return false;
   const hash = await hashPassword(DEMO_PASSWORD);
   const addUser = (email: string, name: string, role: string, athleteId: string | null = null) =>
     db.insert(schema.users).values({ id: randomUUID(), email, name, role, passwordHash: hash, athleteId });
@@ -84,6 +85,7 @@ export async function seedIfEmpty(db: Db) {
   } finally {
     server.close();
   }
+  return true;
 }
 
 if (import.meta.url === `file:///${process.argv[1]?.replace(/\\/g, "/")}`) {

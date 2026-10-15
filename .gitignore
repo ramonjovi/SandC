@@ -11,3 +11,7 @@ dist
 
 desktop.ini
 \#*Knowledge-Base.txt
+
+# Local data and backups (contain athlete records)
+backups/
+.pglite.before-restore-*
