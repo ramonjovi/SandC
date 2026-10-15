@@ -95,6 +95,15 @@ export const EXERCISE_GUIDES: Record<string, ExerciseGuide> = {
     harder: "Stronger band, a pause at the top, or a band at the ankles.",
     stopIf: "Pain in the hip, groin or low back.",
   },
+  cable_hip_abduction: {
+    setup: ["Low pulley with an ankle cuff on the working leg, standing side-on to the machine with the working leg furthest from it, fingertips on the frame for balance only.", "Stand tall on the other leg with a soft knee."],
+    steps: ["Lift the working leg out to the side, leading with the heel, without leaning the trunk or hiking the hip.", "Pause 1 second, then return slowly over 2 seconds. Finish all reps on one side, then turn around for the other (the weaker side gets the extra set if shown)."],
+    cues: ["Stand tall, pelvis level", "Lead with the heel, toes forward", "Slow 2 out, 2 back", "Feel the side of the hip of the moving leg and the standing leg"],
+    errors: ["Leaning the trunk away to lift higher", "Hiking the hip or rotating the toes up", "Swinging the leg", "Gripping the frame"],
+    easier: "Lighter weight or a shorter range.",
+    harder: "Add load by the progression rule, or slow the tempo.",
+    stopIf: "Pain in the hip, groin or low back.",
+  },
   single_leg_stance: {
     setup: ["Stand barefoot or in flat shoes next to a wall or rail for safety, on a firm surface."],
     steps: ["Lift one foot and balance, keeping the pelvis level and a soft bend in the knee.", "Hold for the set time on each side, left first. Progress in order: eyes open, eyes closed, standing on a foam pad, then with head turns."],
