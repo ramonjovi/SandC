@@ -15,6 +15,11 @@ const SECTIONS: Array<{ title: string; hint?: string; collapsed?: boolean; field
     { path: "profile.bodyMassKg", label: "Body mass", kind: "num", unit: "kg" },
     { path: "profile.heightCm", label: "Height", kind: "num", unit: "cm" },
   ] },
+  { title: "Consent and privacy", hint: "Do this before collecting any health information. Give the athlete the privacy notice and consent form (docs/consent-and-privacy.md), keep the signed copy, then record it here.", fields: [
+    { path: "consent.given", label: "Privacy notice given and the athlete agreed (signed form kept)", kind: "bool", wide: true },
+    { path: "consent.date", label: "Date of consent", kind: "date" },
+    { path: "consent.notes", label: "Notes (for example parent/guardian signed, limits the athlete set)", kind: "area", wide: true },
+  ] },
   { title: "Goals", fields: [
     { path: "goals.event", label: "Event", kind: "text" },
     { path: "goals.targetDistanceM", label: "Distance", kind: "num", unit: "m" },

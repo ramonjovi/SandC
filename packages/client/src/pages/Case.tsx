@@ -65,6 +65,9 @@ export function CasePage() {
         </Alert>
       )}
 
+      {!data.athlete.archivedAt && !assessment.data.consent?.given && (
+        <Alert tone="warn"><b>Consent not recorded.</b> Give the athlete the privacy notice and consent form and record their agreement in the Assess tab before collecting health information.</Alert>
+      )}
       <AthleteLifecycle athlete={data.athlete} onChanged={reload} />
       <CaseGuide data={data} assessment={assessment} programRow={programRow} goTab={setTab} />
 

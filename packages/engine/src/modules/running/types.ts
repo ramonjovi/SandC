@@ -80,6 +80,8 @@ export interface PhysicalTests {
 export interface RunnerAssessment {
   profile: RunnerProfile;
   goals: RunnerGoals;
+  /** Athlete consent to record their health information (privacy notice given and agreed). */
+  consent?: { given: boolean; date: string | null; notes: string };
   history: TrainingHistory;
   health: HealthScreen;
   biomechanics: Biomechanics;

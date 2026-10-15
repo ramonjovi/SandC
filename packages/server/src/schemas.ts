@@ -22,6 +22,11 @@ export const AssessmentSchema = z.object({
     raceDate: z.string().nullable().default(null),
     narrative: z.string().default(""),
   }),
+  consent: z.object({
+    given: bool,
+    date: z.string().nullable().default(null),
+    notes: z.string().default(""),
+  }).default({}),
   history: z.object({
     weeklyKm: z.number().min(0).default(0),
     longestRunKm: z.number().min(0).default(0),

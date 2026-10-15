@@ -19,6 +19,10 @@ export function CaseGuide({ data, assessment, programRow, goTab }: { data: any; 
   const novice = programRow?.data?.trainingTier === "novice";
 
   const steps: Step[] = [
+    { id: "consent", title: "Consent and privacy notice", done: Boolean(d.consent?.given), tab: "assess", what: [
+      "Give the athlete the privacy notice and consent form (docs/consent-and-privacy.md), answer their questions, and keep the signed copy.",
+      "Tick the consent box and date in the Assess tab before collecting health information. Under 18: a parent or guardian signs too.",
+    ] },
     { id: "intake", title: "Intake and screening", done: Boolean(d.profile?.name && d.history?.weeklyKm != null && hasTests), tab: "assess", what: [
       "Fill in profile, goals and training history (recent race, weekly distance, breaks).",
       "Ask the health-screening questions privately and record any pain site. The app only flags these for you; it never clears an athlete.",
