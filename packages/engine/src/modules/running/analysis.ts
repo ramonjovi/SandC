@@ -65,7 +65,7 @@ export const ANALYSIS_PHASES: AnalysisPhase[] = [
   {
     id: "hip-extension", label: "Hip extension", view: "side", reportTitle: "How far your leg swings behind you",
     capture: "Side view, late stance (just before the foot leaves the ground).",
-    lookFor: "How far the thigh is behind vertical.",
+    lookFor: "How far the thigh trails behind true vertical (use the picture editor's Level and Angle from vertical tools). The knee must be behind the hip line, otherwise the thigh is flexed, not extended.",
     finding: (a) => (a.biomechanics.peakHipExtensionDeg == null ? null : `${a.biomechanics.peakHipExtensionDeg}° of hip extension`),
     discussion: (a) => `${a.biomechanics.peakHipExtensionDeg != null ? `About ${a.biomechanics.peakHipExtensionDeg}° of hip extension. ` : ""}Reduced hip extension is common in recreational runners and is often linked to tight hip flexors, but the right amount differs from person to person. Around 10° can be fine for a slower, compact runner. It matters more when combined with overstriding or a bouncy stride.`,
   },

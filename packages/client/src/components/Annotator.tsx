@@ -7,23 +7,26 @@ type Shape =
   | { t: "line"; a: Pt; b: Pt }
   | { t: "arrow"; a: Pt; b: Pt }
   | { t: "angle"; a: Pt; v: Pt; c: Pt }
+  | { t: "vang"; a: Pt; b: Pt }
   | { t: "circle"; c: Pt; r: number }
   | { t: "pen"; pts: Pt[] }
   | { t: "text"; p: Pt; text: string }
   | { t: "plumb"; x: number };
 type Op = Shape & { color: string };
-type Tool = "none" | "line" | "arrow" | "angle" | "circle" | "pen" | "text" | "plumb";
+type Tool = "none" | "level" | "line" | "arrow" | "angle" | "vang" | "circle" | "pen" | "text" | "plumb";
 
 const MAX_SIDE = 1400;
 const COLORS = [["#eb6834", "Orange"], ["#e11d48", "Red"], ["#2a78d6", "Blue"], ["#16a34a", "Green"], ["#ffffff", "White"], ["#111111", "Black"]] as const;
 const TOOLS: Array<{ id: Tool; label: string; need: number; hint: string }> = [
+  { id: "level", label: "Level picture", need: 2, hint: "Do this first. Click the top, then the bottom of something truly vertical in the picture (door frame, window edge, a plumb line). The picture rotates to make it vertical" },
+  { id: "plumb", label: "Vertical line", need: 1, hint: "Click once: a vertical reference line through that point" },
+  { id: "vang", label: "Angle from vertical", need: 2, hint: "Click the top point (for example the hip), then the other end (for example the knee). Shows the angle from true vertical" },
+  { id: "angle", label: "Angle", need: 3, hint: "Click the first arm end, the joint, then the second arm end" },
   { id: "line", label: "Line", need: 2, hint: "Click 2 points" },
   { id: "arrow", label: "Arrow", need: 2, hint: "Click the tail, then the point" },
-  { id: "angle", label: "Angle", need: 3, hint: "Click the first arm end, the joint, then the second arm end" },
   { id: "circle", label: "Circle", need: 2, hint: "Click the centre, then the edge" },
   { id: "pen", label: "Pen", need: 0, hint: "Press and drag to draw freehand" },
   { id: "text", label: "Text", need: 1, hint: "Click where the label goes" },
-  { id: "plumb", label: "Vertical line", need: 1, hint: "Click once: a vertical reference line through that point" },
 ];
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -33,6 +36,8 @@ const angleDeg = (a: Pt, v: Pt, c: Pt) => {
   if (d > 180) d = 360 - d;
   return Math.round(d * 10) / 10;
 };
+/** Angle between the line a-b and true vertical, in degrees (0 = straight up and down). */
+export const fromVertical = (a: Pt, b: Pt) => Math.round(Math.atan2(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) * (180 / Math.PI) * 10) / 10;
 
 /** Shrinks a picture to a JPEG small enough to store (tries lower quality, then smaller size). */
 export function exportJpeg(src: HTMLCanvasElement, limitBytes = 1_800_000): string {
@@ -49,9 +54,10 @@ export function exportJpeg(src: HTMLCanvasElement, limitBytes = 1_800_000): stri
   return canvas.toDataURL("image/jpeg", 0.4);
 }
 
-function draw(c: HTMLCanvasElement, img: HTMLImageElement, ops: Op[], pending: Pt[], live: Pt[] | null, color: string) {
+function draw(c: HTMLCanvasElement, img: HTMLImageElement, rot: number, ops: Op[], pending: Pt[], live: Pt[] | null, color: string) {
   const g = c.getContext("2d")!;
-  g.drawImage(img, 0, 0, c.width, c.height);
+  g.fillStyle = "#222"; g.fillRect(0, 0, c.width, c.height);
+  g.save(); g.translate(c.width / 2, c.height / 2); g.rotate(rot); g.drawImage(img, -c.width / 2, -c.height / 2, c.width, c.height); g.restore();
   const lw = Math.max(2, c.width / 400);
   const fontPx = Math.round(c.width / 38);
   g.lineCap = "round"; g.lineJoin = "round"; g.font = `bold ${fontPx}px sans-serif`;
@@ -59,6 +65,9 @@ function draw(c: HTMLCanvasElement, img: HTMLImageElement, ops: Op[], pending: P
   const label = (text: string, p: Pt, col: string) => {
     g.lineWidth = lw * 3; g.strokeStyle = col === "#ffffff" ? "#111111" : "#ffffff"; g.strokeText(text, p.x, p.y);
     g.fillStyle = col; g.fillText(text, p.x, p.y);
+  };
+  const dashedVertical = (x: number, y0: number, y1: number, col: string) => {
+    g.strokeStyle = col; g.lineWidth = lw; g.setLineDash([lw * 4, lw * 3]); g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); g.setLineDash([]);
   };
   for (const o of ops) {
     g.lineWidth = lw; g.strokeStyle = o.color; g.fillStyle = o.color;
@@ -72,16 +81,21 @@ function draw(c: HTMLCanvasElement, img: HTMLImageElement, ops: Op[], pending: P
       g.beginPath(); g.moveTo(o.a.x, o.a.y); g.lineTo(o.v.x, o.v.y); g.lineTo(o.c.x, o.c.y); g.stroke();
       dot(o.a, o.color); dot(o.v, o.color); dot(o.c, o.color);
       label(`${angleDeg(o.a, o.v, o.c)}°`, { x: o.v.x + 12, y: o.v.y - 12 }, o.color);
+    } else if (o.t === "vang") {
+      const reach = Math.max(dist(o.a, o.b), 60);
+      dashedVertical(o.a.x, o.a.y - reach * 0.4, o.a.y + reach * 1.1, o.color);
+      g.lineWidth = lw; g.strokeStyle = o.color; g.beginPath(); g.moveTo(o.a.x, o.a.y); g.lineTo(o.b.x, o.b.y); g.stroke(); dot(o.a, o.color); dot(o.b, o.color);
+      label(`${fromVertical(o.a, o.b)}° from vertical`, { x: Math.max(o.a.x, o.b.x) + 12, y: (o.a.y + o.b.y) / 2 }, o.color);
     } else if (o.t === "circle") { g.beginPath(); g.arc(o.c.x, o.c.y, o.r, 0, Math.PI * 2); g.stroke(); }
     else if (o.t === "pen") { if (o.pts.length > 1) { g.beginPath(); g.moveTo(o.pts[0].x, o.pts[0].y); o.pts.slice(1).forEach((p) => g.lineTo(p.x, p.y)); g.stroke(); } }
     else if (o.t === "text") label(o.text, o.p, o.color);
-    else if (o.t === "plumb") { g.setLineDash([lw * 4, lw * 3]); g.beginPath(); g.moveTo(o.x, 0); g.lineTo(o.x, c.height); g.stroke(); g.setLineDash([]); }
+    else if (o.t === "plumb") dashedVertical(o.x, 0, c.height, o.color);
   }
   if (live && live.length > 1) { g.lineWidth = lw; g.strokeStyle = color; g.beginPath(); g.moveTo(live[0].x, live[0].y); live.slice(1).forEach((p) => g.lineTo(p.x, p.y)); g.stroke(); }
   pending.forEach((p) => dot(p, color));
 }
 
-/** Pick a frame, mark it up (lines, arrows, angles, circles, freehand, labels, a vertical reference line), then save. Nothing leaves the browser until you press Save. */
+/** Pick a frame, level it, mark it up (angles, angle from true vertical, lines, arrows, circles, freehand, labels), then save. Nothing leaves the browser until you press Save. */
 export function Annotator({ file, onCancel, onDone }: { file: File; onCancel: () => void; onDone: (dataUrl: string, measure: string) => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const img = useRef<HTMLImageElement | null>(null);
@@ -92,6 +106,8 @@ export function Annotator({ file, onCancel, onDone }: { file: File; onCancel: ()
   const [ops, setOps] = useState<Op[]>([]);
   const [pending, setPending] = useState<Pt[]>([]);
   const [live, setLive] = useState<Pt[] | null>(null);
+  const [rot, setRot] = useState(0);
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     const url = URL.createObjectURL(file);
@@ -106,7 +122,7 @@ export function Annotator({ file, onCancel, onDone }: { file: File; onCancel: ()
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  useEffect(() => { if (ready) draw(canvas.current!, img.current!, ops, pending, live, color); }, [ready, ops, pending, live, color]);
+  useEffect(() => { if (ready) draw(canvas.current!, img.current!, rot, ops, pending, live, color); }, [ready, rot, ops, pending, live, color]);
 
   const point = (e: React.PointerEvent<HTMLCanvasElement>): Pt | null => {
     const c = canvas.current!, r = c.getBoundingClientRect();
@@ -127,8 +143,18 @@ export function Annotator({ file, onCancel, onDone }: { file: File; onCancel: ()
       return;
     }
     const next = [...pending, p];
+    if (tool === "level" && next.length === 2) {
+      if (ops.length) { setNote("Level the picture before drawing: press Clear first, then level."); setPending([]); return; }
+      let [a, b] = next;
+      if (b.y < a.y) [a, b] = [b, a];
+      if (Math.abs(b.y - a.y) < 20) { setNote("Pick two points further apart, one above the other."); setPending([]); return; }
+      const phi = Math.atan2(b.x - a.x, b.y - a.y);
+      setRot((r) => r + phi); setPending([]); setNote(`Picture levelled by ${Math.round(Math.abs(phi) * (180 / Math.PI) * 10) / 10}°.`);
+      return;
+    }
     if (tool === "line" && next.length === 2) add({ t: "line", a: next[0], b: next[1] });
     else if (tool === "arrow" && next.length === 2) add({ t: "arrow", a: next[0], b: next[1] });
+    else if (tool === "vang" && next.length === 2) add({ t: "vang", a: next[0], b: next[1] });
     else if (tool === "circle" && next.length === 2) add({ t: "circle", c: next[0], r: dist(next[0], next[1]) });
     else if (tool === "angle" && next.length === 3) add({ t: "angle", a: next[0], v: next[1], c: next[2] });
     else setPending(next);
@@ -144,6 +170,8 @@ export function Annotator({ file, onCancel, onDone }: { file: File; onCancel: ()
   }
 
   const angles = ops.filter((o): o is Extract<Op, { t: "angle" }> => o.t === "angle").map((o) => `${angleDeg(o.a, o.v, o.c)}°`);
+  const vertical = ops.filter((o): o is Extract<Op, { t: "vang" }> => o.t === "vang").map((o) => `${fromVertical(o.a, o.b)}° from vertical`);
+  const measure = [angles.length ? `Angle ${angles.join(", ")}` : "", ...vertical].filter(Boolean).join("; ");
   const spec = TOOLS.find((t) => t.id === tool);
   const hint = spec ? `${spec.hint}${spec.need > 1 ? ` (${pending.length}/${spec.need})` : ""}` : "Choose a tool, or save the picture as it is.";
 
@@ -152,7 +180,7 @@ export function Annotator({ file, onCancel, onDone }: { file: File; onCancel: ()
       <div className="flex max-h-full w-full max-w-4xl flex-col gap-3 overflow-hidden rounded-xl bg-white p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-1.5">
           {TOOLS.map((t) => (
-            <Button key={t.id} size="sm" variant={tool === t.id ? "default" : "outline"} onClick={() => { setTool(t.id); setPending([]); }}>{t.label}</Button>
+            <Button key={t.id} size="sm" variant={tool === t.id ? "default" : "outline"} onClick={() => { setTool(t.id); setPending([]); setNote(""); }}>{t.label}</Button>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -164,10 +192,11 @@ export function Annotator({ file, onCancel, onDone }: { file: File; onCancel: ()
           </span>
           <Button size="sm" variant="ghost" disabled={!ops.length && !pending.length} onClick={() => { if (pending.length) setPending([]); else setOps(ops.slice(0, -1)); }}>Undo</Button>
           <Button size="sm" variant="ghost" disabled={!ops.length} onClick={() => { setOps([]); setPending([]); }}>Clear</Button>
-          <span className="text-xs text-muted-foreground">{hint}</span>
+          {rot !== 0 && <Button size="sm" variant="ghost" onClick={() => { setRot(0); setNote("Level reset."); }}>Reset level</Button>}
+          <span className="text-xs text-muted-foreground">{note || hint}</span>
           <span className="ml-auto flex gap-2">
             <Button size="sm" variant="outline" onClick={onCancel}>Cancel</Button>
-            <Button size="sm" disabled={!ready} onClick={() => onDone(exportJpeg(canvas.current!), angles.length ? `Angle ${angles.join(", ")}` : "")}>Save picture</Button>
+            <Button size="sm" disabled={!ready} onClick={() => onDone(exportJpeg(canvas.current!), measure)}>Save picture</Button>
           </span>
         </div>
         <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/30">
@@ -175,7 +204,7 @@ export function Annotator({ file, onCancel, onDone }: { file: File; onCancel: ()
           <canvas ref={canvas} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
             className="mx-auto block max-h-[70vh] w-auto max-w-full touch-none" style={{ cursor: tool === "none" ? "default" : "crosshair" }} />
         </div>
-        {angles.length > 0 && <div className="text-sm"><b>Measured:</b> {angles.join(", ")} (saved with the picture; this is the angle between the lines you drew)</div>}
+        {measure && <div className="text-sm"><b>Measured:</b> {measure} <span className="text-xs text-muted-foreground">(saved with the picture)</span></div>}
       </div>
     </div>
   );
