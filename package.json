@@ -1,0 +1,26 @@
+{
+  "name": "tpc-performance-os",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w @tpc/server\" \"npm run dev -w @tpc/client\"",
+    "test": "npm run test -w @tpc/engine && npm run test -w @tpc/server",
+    "typecheck": "npm run typecheck -w @tpc/engine && npm run typecheck -w @tpc/server && npm run typecheck -w @tpc/client",
+    "build": "npm run build -w @tpc/client",
+    "start": "npm run start -w @tpc/server",
+    "db:generate": "npm run db:generate -w @tpc/server",
+    "seed": "npm run seed -w @tpc/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "drizzle-orm": "^0.45.4",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

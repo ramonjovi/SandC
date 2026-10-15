@@ -1,0 +1,33 @@
+{
+  "name": "@tpc/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "seed": "tsx src/seed.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.12",
+    "@tpc/engine": "*",
+    "drizzle-orm": "^0.45.4",
+    "express": "^4.21.0",
+    "pg": "^8.13.0",
+    "tsx": "^4.19.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/supertest": "^6.0.2",
+    "drizzle-kit": "^0.31.11",
+    "supertest": "^7.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

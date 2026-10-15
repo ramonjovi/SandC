@@ -1,0 +1,120 @@
+import { z } from "zod";
+import type { running } from "@tpc/engine";
+
+const num = z.number().finite().nullable().default(null);
+const bool = z.boolean().default(false);
+const triBool = z.boolean().nullable().default(null);
+
+export const PainSite = z.enum(["none", "tibia", "foot", "achilles", "calf", "knee", "hip", "hamstring", "lumbar", "other"]);
+
+export const AssessmentSchema = z.object({
+  profile: z.object({
+    name: z.string().min(1),
+    sex: z.enum(["male", "female", "other"]),
+    age: z.number().int().min(10).max(100),
+    bodyMassKg: z.number().min(25).max(200),
+    heightCm: num,
+  }),
+  goals: z.object({
+    event: z.string().default("10k"),
+    targetDistanceM: z.number().min(100).max(100000),
+    targetTimeSec: num,
+    raceDate: z.string().nullable().default(null),
+    narrative: z.string().default(""),
+  }),
+  history: z.object({
+    weeklyKm: z.number().min(0).default(0),
+    longestRunKm: z.number().min(0).default(0),
+    longestRunMin: num,
+    recentRace: z.object({ distanceM: z.number().positive(), timeSec: z.number().positive(), daysAgo: z.number().min(0) }).nullable().default(null),
+    breakDays: z.number().min(0).default(0),
+    crossTrainedDuringBreak: bool,
+    strengthTrainingYears: num,
+  }).default({}),
+  health: z.object({
+    painModifiedTraining: bool,
+    painSite: PainSite.default("none"),
+    menstrualIrregularity: bool,
+    amenorrheaOver3Months: bool,
+    lowMorningErectionsOrLibido: bool,
+    unintendedWeightLossOver5Pct: bool,
+    bsiHistoryCount: z.number().int().min(0).default(0),
+    eatingDisorderConcern: bool,
+    cardiacSymptoms: bool,
+    dxaZScore: num,
+    notes: z.string().default(""),
+  }).default({}),
+  biomechanics: z.object({
+    footStrike: z.enum(["rearfoot", "midfoot", "forefoot"]).nullable().default(null),
+    cadenceSpm: num,
+    overstride: triBool,
+    peakKneeFlexionDeg: num,
+    peakHipExtensionDeg: num,
+    verticalOscillation: z.enum(["low", "moderate", "high"]).nullable().default(null),
+    pelvicDrop: z.enum(["none", "mild", "marked"]).nullable().default(null),
+    kneeValgus: triBool,
+    crossover: triBool,
+    heelWhip: triBool,
+    notes: z.string().default(""),
+  }).default({}),
+  physical: z.object({
+    squatLoadKg: num,
+    squatReps: num,
+    imtpPeakForceN: num,
+    cmjPeakForceN: num,
+    cmjHeightCm: num,
+    broadJumpM: num,
+    sebtAsymmetryCm: num,
+    calfRaiseLeftReps: num,
+    calfRaiseRightReps: num,
+    nordicForceN: num,
+    notes: z.string().default(""),
+  }).default({}),
+});
+
+export function parseAssessment(input: unknown): running.RunnerAssessment {
+  return AssessmentSchema.parse(input) as running.RunnerAssessment;
+}
+
+export const CreateAthleteSchema = z.object({
+  profile: AssessmentSchema.shape.profile,
+  goals: AssessmentSchema.shape.goals,
+  clinician: z.string().default("clinician"),
+});
+
+export const PtSchema = z.object({
+  clinician: z.string().min(1),
+  priorityKeys: z.array(z.string()),
+  strategy: z.enum(["high_load", "plyometric", "combined"]),
+  reasoning: z.string().default(""),
+  concerns: z.string().optional(),
+});
+
+export const ApproveSchema = z.object({
+  clinician: z.string().min(1),
+  screeningReviewed: z.literal(true, { errorMap: () => ({ message: "Screening must be reviewed and acknowledged before approval." }) }),
+  clearanceNote: z.string().optional(),
+});
+
+export const SessionLogSchema = z.object({
+  week: z.number().int().min(1),
+  day: z.number().int().min(1),
+  performedAt: z.string().optional(),
+  cmjHeightCm: z.number().nullable().optional(),
+  sessionRpe: z.number().min(0).max(10).nullable().optional(),
+  notes: z.string().optional(),
+  exercises: z.array(z.object({
+    prescribedId: z.string(),
+    exerciseId: z.string(),
+    sets: z.array(z.object({ reps: z.number().min(0), loadKg: z.number().nullable() })),
+    rirFinal: z.number().min(0).max(10).nullable(),
+    pain: z.number().min(0).max(10).nullable(),
+  })),
+});
+
+export const WeeklyLogSchema = z.object({
+  weekStart: z.string(),
+  runKm: z.number().min(0),
+  painModifiedTraining: z.boolean().default(false),
+  notes: z.string().optional(),
+});
