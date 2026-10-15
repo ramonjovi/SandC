@@ -49,10 +49,11 @@ export function fmtPace(secPerKm: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}/km`;
 }
 
-/** Detraining multipliers (KB Table 9.1 transcription). Rule running.vdot.break-adjustment: needs verification. */
+/** Daniels' Running Formula 4th ed., Table 9.1 (VDOT adjustments for training breaks): [days, FVDOT-1, FVDOT-2]. */
 const BREAK_TABLE: Array<[days: number, noCross: number, cross: number]> = [
-  [5, 1.0, 1.0], [7, 0.994, 0.997], [14, 0.973, 0.986], [21, 0.952, 0.976],
-  [28, 0.931, 0.965], [42, 0.889, 0.944], [56, 0.847, 0.923], [72, 0.8, 0.9],
+  [5, 1.0, 1.0], [6, 0.997, 0.998], [7, 0.994, 0.997], [10, 0.985, 0.992], [14, 0.973, 0.986], [21, 0.952, 0.976],
+  [28, 0.931, 0.965], [35, 0.91, 0.955], [42, 0.889, 0.944], [49, 0.868, 0.934], [56, 0.847, 0.923],
+  [63, 0.826, 0.913], [70, 0.805, 0.902], [72, 0.8, 0.9],
 ];
 
 export function breakMultiplier(days: number, crossTrained: boolean): number {
@@ -75,13 +76,20 @@ export interface PaceZones {
   E: number; M: number; T: number; I: number; R: number;
 }
 
+/**
+ * Seconds per 400 m between R and I pace (and I and T). Daniels: a 6-second rule, "a 7- or 8-second rule for runners in the
+ * 50 or 40 VDOT categories". The VDOT bands below are a software reading of that sentence.
+ */
+export function pacingGapSecPer400(vdot: number): number {
+  return vdot >= 55 ? 6 : vdot >= 45 ? 7 : 8;
+}
+
 /** Training pace zones (sec/km). Fractions are editable defaults (rule running.vdot.paces). */
 export function paceZones(vdot: number): PaceZones {
   const I = paceSecPerKm(vdot, 0.975);
-  // R is faster than I by ~6 s per 400 m (8 s when VDOT < 40): 15 s/km or 20 s/km.
-  const rGap = (vdot < 40 ? 8 : 6) * 2.5;
+  const rGap = pacingGapSecPer400(vdot) * 2.5; // per 400 m -> per km
   return {
-    E: paceSecPerKm(vdot, 0.7),
+    E: paceSecPerKm(vdot, 0.66), // Daniels' average easy intensity (range 59-74% of VDOT)
     M: paceSecPerKm(vdot, 0.8),
     T: paceSecPerKm(vdot, 0.86),
     I,

@@ -58,6 +58,14 @@ export const CORE_RULES: Rule[] = [
     defaults: { unloadVolumeCut: 0.45 },
   },
   {
+    id: "core.periodization.2to1",
+    title: "2:1 build-to-recover cycle for novices",
+    status: "source_verified",
+    source: "NSCA Developing Endurance 2nd ed., ch. 3",
+    statement: "Novice athletes are better served by a 2:1 week build-to-recover model than the traditional 3:1, to ensure enough recovery.",
+    verification: "Read in the book text.",
+  },
+  {
     id: "core.screening.no-auto-clearance",
     title: "No automated medical clearance",
     status: "source_verified",

@@ -91,12 +91,16 @@ function Workouts({ code, me, reload }: { code: string; me: any; reload: () => v
               <CardDescription>{s.focus}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              {s.warmup && s.warmup.length > 0 && (
+                <details className="rounded-lg bg-muted/60 px-3 py-2 text-sm"><summary className="cursor-pointer font-medium">Warm-up first</summary>
+                  <ul className="ml-5 mt-1 list-disc text-muted-foreground">{s.warmup.map((w) => <li key={w}>{w}</li>)}</ul></details>
+              )}
               {s.exercises.map((e) => {
                 const prop = log?.proposals.find((p: any) => p.prescribedId === e.id);
                 return (
                   <div key={e.id} className="border-b pb-3 last:border-0 last:pb-0">
                     <div className="font-medium text-sm">{e.name}</div>
-                    <div className="text-sm">{e.sets} × {e.reps} {unitLabel(e)}{e.loadKg != null ? ` @ ${e.loadKg} kg` : e.category === "plyometric" ? " · bodyweight" : ""}{e.rir != null ? ` · stop with ${e.rir} reps left` : ""} · rest {Math.round(e.restSec / 60 * 10) / 10} min</div>
+                    <div className="text-sm">{e.sets} × {e.reps} {unitLabel(e)}{e.extraSetSide ? ` (+1 set ${e.extraSetSide})` : ""}{e.loadKg != null ? ` @ ${e.loadKg} kg` : e.category === "plyometric" ? " · bodyweight" : ""}{e.rir != null ? ` · stop with ${e.rir} reps left` : ""} · rest {Math.round(e.restSec / 60 * 10) / 10} min</div>
                     {e.cue && <div className="text-xs text-muted-foreground">{e.cue}</div>}
                     {e.notes && <div className="text-xs text-amber-800">{e.notes}</div>}
                     {prop && <div className="mt-1 rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-900"><b>Next time:</b> {prop.nextLoadKg != null ? `${prop.nextLoadKg} kg · ` : ""}{prop.nextSets} × {prop.nextReps}. {prop.reason} <i>(your clinician confirms)</i></div>}

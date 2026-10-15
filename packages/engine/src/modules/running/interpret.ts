@@ -2,6 +2,7 @@ import type { EngineReport, Finding, Priority, SafetyFlag, SiteRestriction, Stra
 import { epley1RM, round1, round2 } from "../../core/util";
 import { SITE_EXCLUSIONS } from "./exercises";
 import type { RunnerAssessment } from "./types";
+import { trainingTier } from "./tier";
 import { breakMultiplier, fmtPace, fmtTime, paceZones, predictTimeSec, vdotFromRace } from "./vdot";
 
 export const ENGINE_VERSION = "0.1.0";
@@ -54,6 +55,7 @@ export function computeMetrics(a: RunnerAssessment): Metrics {
   m.calfRaiseAvg = l != null && r != null ? round1((l + r) / 2) : l ?? r ?? null;
   m.calfRaiseAsymPct = l != null && r != null && Math.max(l, r) > 0 ? round1((Math.abs(l - r) / Math.max(l, r)) * 100) : null;
   m.cadenceSpm = b.cadenceSpm;
+  m.trainingTier = trainingTier(h.strengthTrainingYears);
   return m;
 }
 
@@ -194,10 +196,17 @@ export function interpretRunner(a: RunnerAssessment): EngineReport {
   if (ph.nordicForceN != null) {
     findings.push({ id: "nordic", domain: "Physical capacity", severity: "info", text: `Nordic eccentric force ${ph.nordicForceN} N (${round1(ph.nordicForceN / pr.bodyMassKg)} N/kg). Tracked for change; no verified cutoff applied.`, ruleIds: [] });
   }
-  if (h.strengthTrainingYears != null && h.strengthTrainingYears < 1) {
-    findings.push({ id: "novice", domain: "Training history", severity: "attention", text: "Little prior strength-training experience: use the conservative load-check in week 1 and prioritise technique.", ruleIds: ["running.program.starting-loads"] });
-    used.add("running.program.starting-loads");
-    addPri("posterior_chain", 40, "Build posterior-chain capacity and technique before heavy loads.", ["running.program.starting-loads"]);
+  const tier = trainingTier(h.strengthTrainingYears);
+  used.add("running.strength.training-age"); used.add("running.plyo.contacts");
+  if (h.strengthTrainingYears == null) {
+    missing.push("Strength-training experience not entered: treated as novice (3 sets or fewer, low-level plyometrics only).");
+  }
+  if (tier === "novice") {
+    findings.push({ id: "training-tier", domain: "Training history", severity: "attention", text: "Novice strength-training experience (< 1 year): the program uses 3 sets or fewer, a 2:1 build-to-recover cycle, lower starting intensities and low-level plyometrics only (30-50 contacts).", ruleIds: ["running.strength.training-age", "running.plyo.contacts", "core.periodization.2to1"] });
+    used.add("core.periodization.2to1");
+    addPri("posterior_chain", 40, "Build technique and posterior-chain capacity before heavy loads.", ["running.strength.training-age"]);
+  } else {
+    findings.push({ id: "training-tier", domain: "Training history", severity: "info", text: `${tier === "experienced" ? "Experienced" : "Intermediate"} strength-training background: up to 4 sets and plyometrics up to ${tier === "experienced" ? "100" : "80"} contacts per session.`, ruleIds: ["running.strength.training-age", "running.plyo.contacts"] });
   }
 
   /* ---- strategy ---- */

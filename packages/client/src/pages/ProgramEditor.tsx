@@ -86,11 +86,15 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
         <Card key={s.id}>
           <CardHeader><CardTitle>{s.name}</CardTitle><CardDescription>{s.focus}</CardDescription></CardHeader>
           <CardContent className="space-y-3">
+            {s.warmup && s.warmup.length > 0 && (
+              <details className="rounded-lg bg-muted/60 px-3 py-2 text-sm"><summary className="cursor-pointer font-medium">Warm-up</summary>
+                <ul className="ml-5 mt-1 list-disc text-muted-foreground">{s.warmup.map((w) => <li key={w}>{w}</li>)}</ul></details>
+            )}
             {s.exercises.map((e, ei) => (
               <div key={e.id} className="rounded-lg border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="font-medium text-sm">{e.name} {e.pairedWith && <Badge variant="outline">contrast pair</Badge>}</div>
+                    <div className="font-medium text-sm">{e.name} {e.pairedWith && <Badge variant="outline">contrast pair</Badge>} {e.extraSetSide && <Badge variant="warn">+1 set {e.extraSetSide}</Badge>}</div>
                     <div className="text-xs text-muted-foreground">{e.cue}</div>
                   </div>
                   <Button variant="ghost" size="icon" aria-label="Remove exercise" onClick={() => upd((p) => p.weeks[week - 1].sessions[si].exercises.splice(ei, 1))}><Trash2 className="h-4 w-4" /></Button>

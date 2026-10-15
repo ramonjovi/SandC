@@ -97,6 +97,8 @@ export interface PrescribedExercise {
   restSec: number;
   /** Set when this exercise is the plyometric half of a contrast pair. */
   pairedWith?: string;
+  /** For per-side exercises when one side is weaker: that side gets one extra set. */
+  extraSetSide?: "left" | "right";
   cue?: string;
   progressionRule: string;
   notes?: string;
@@ -109,6 +111,8 @@ export interface ProgramSession {
   day: number;
   name: string;
   focus: string;
+  /** Short warm-up / priming checklist shown before the lifts. */
+  warmup?: string[];
   exercises: PrescribedExercise[];
 }
 
@@ -151,6 +155,8 @@ export interface Program {
   milestones: Milestone[];
   assumptions: string[];
   restrictionsApplied: string[];
+  /** Strength-training experience tier used to scale volume and plyometric exposure. */
+  trainingTier?: string;
   rulesUsed: string[];
 }
 

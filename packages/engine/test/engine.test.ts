@@ -5,7 +5,7 @@ import {
 } from "../src";
 import { SYNTHETIC_ALEX, SYNTHETIC_SAM } from "../src/fixtures";
 
-const { vdotFromRace, predictTimeSec, paceZones, breakMultiplier, interpretRunner, generateRunnerProgram } = running;
+const { vdotFromRace, predictTimeSec, paceZones, breakMultiplier, interpretRunner, generateRunnerProgram, pacingGapSecPer400, trainingTier, enforceContactCap } = running;
 
 describe("VDOT", () => {
   it("20:00 5k is about VDOT 49.8", () => {
@@ -26,7 +26,9 @@ describe("VDOT", () => {
     expect(breakMultiplier(3, false)).toBe(1);
     expect(breakMultiplier(14, false)).toBeCloseTo(0.973);
     expect(breakMultiplier(14, true)).toBeCloseTo(0.986);
-    expect(breakMultiplier(10.5, false)).toBeCloseTo((0.994 + 0.973) / 2, 3);
+    expect(breakMultiplier(12, false)).toBeCloseTo((0.985 + 0.973) / 2, 3);
+    expect(breakMultiplier(35, false)).toBe(0.91);
+    expect(breakMultiplier(63, true)).toBe(0.913);
     expect(breakMultiplier(100, false)).toBe(0.8);
   });
 });
@@ -131,6 +133,8 @@ describe("interpretation (Sam)", () => {
   });
 });
 
+const contacts = (list: Array<{ unit: string; sets: number; reps: number }>) => list.filter((e) => e.unit === "contacts").reduce((a, e) => a + e.sets * e.reps, 0);
+
 describe("program generation", () => {
   const rep = interpretRunner(SYNTHETIC_ALEX);
   const p = generateRunnerProgram(SYNTHETIC_ALEX, rep);
@@ -159,11 +163,9 @@ describe("program generation", () => {
     const heavy = p.weeks.flatMap((w) => w.sessions.flatMap((s) => s.exercises)).filter((e) => e.category === "strength");
     expect(heavy.every((e) => e.reps <= 8)).toBe(true);
   });
-  it("keeps plyometric contacts per session at or below 60", () => {
-    for (const w of p.weeks) for (const s of w.sessions) {
-      const c = s.exercises.filter((e) => e.unit === "contacts").reduce((a, e) => a + e.sets * e.reps, 0);
-      expect(c).toBeLessThanOrEqual(60);
-    }
+  it("keeps plyometric contacts within the experience-tier cap (intermediate: 80)", () => {
+    expect(p.trainingTier).toBe("intermediate");
+    for (const w of p.weeks) for (const s of w.sessions) expect(contacts(s.exercises)).toBeLessThanOrEqual(80);
   });
   it("includes soleus work and objectives with baselines", () => {
     expect(p.weeks[0].sessions[0].exercises.some((e) => e.exerciseId === "seated_soleus_raise")).toBe(true);
@@ -215,5 +217,103 @@ describe("roadmap and rule registry", () => {
     for (const rep of [interpretRunner(SYNTHETIC_ALEX), interpretRunner(SYNTHETIC_SAM)]) for (const id of rep.rulesUsed) expect(ids.has(id), id).toBe(true);
     const prog = generateRunnerProgram(SYNTHETIC_ALEX, interpretRunner(SYNTHETIC_ALEX));
     for (const id of prog.rulesUsed) expect(ids.has(id), id).toBe(true);
+  });
+});
+
+describe("pacing", () => {
+  it("six-second rule widens for lower VDOT", () => {
+    expect(pacingGapSecPer400(60)).toBe(6);
+    expect(pacingGapSecPer400(50)).toBe(7);
+    expect(pacingGapSecPer400(40)).toBe(8);
+  });
+  it("R-to-T spacing is close to Daniels' 16 s per 400 at VDOT 51", () => {
+    const z = paceZones(51);
+    const per400 = ((z.T - z.R) / 1000) * 400;
+    expect(per400).toBeGreaterThan(13);
+    expect(per400).toBeLessThan(19);
+  });
+});
+
+describe("training-age tiers", () => {
+  it("maps experience to tiers, unknown is novice", () => {
+    expect(trainingTier(null)).toBe("novice");
+    expect(trainingTier(0.5)).toBe("novice");
+    expect(trainingTier(2)).toBe("intermediate");
+    expect(trainingTier(5)).toBe("experienced");
+  });
+  const novice = { ...SYNTHETIC_ALEX, history: { ...SYNTHETIC_ALEX.history, strengthTrainingYears: 0 } };
+  const np = generateRunnerProgram(novice, interpretRunner(novice));
+  const all = np.weeks.flatMap((w) => w.sessions.flatMap((s) => s.exercises));
+  it("novices get 3 sets or fewer, lower intensities, 2:1 unloads and low-level plyometrics only", () => {
+    expect(np.trainingTier).toBe("novice");
+    expect(Math.max(...all.filter((e) => e.category === "strength").map((e) => e.sets))).toBeLessThanOrEqual(3);
+    expect(Math.max(...all.filter((e) => e.pct1RM != null && e.category === "strength").map((e) => e.pct1RM!))).toBeLessThanOrEqual(80);
+    expect(np.weeks.filter((w) => w.isUnload).map((w) => w.week)).toEqual([3, 6, 8]);
+    expect(all.filter((e) => e.category === "plyometric").every((e) => ["pogo_hops", "skips_for_height"].includes(e.exerciseId))).toBe(true);
+    expect(all.some((e) => e.pairedWith)).toBe(false);
+    for (const w of np.weeks) for (const s of w.sessions) expect(contacts(s.exercises)).toBeLessThanOrEqual(50);
+  });
+  it("experienced runners may reach up to 100 contacts but never more", () => {
+    const exp = { ...SYNTHETIC_ALEX, history: { ...SYNTHETIC_ALEX.history, strengthTrainingYears: 6 } };
+    const ep = generateRunnerProgram(exp, interpretRunner(exp));
+    for (const w of ep.weeks) for (const s of w.sessions) expect(contacts(s.exercises)).toBeLessThanOrEqual(100);
+  });
+  it("enforceContactCap reduces volume deterministically", () => {
+    const mk = (id: string, sets: number, reps: number) => ({ id, exerciseId: id, name: id, category: "plyometric", sets, reps, unit: "contacts", perSide: false, loadKg: null, pct1RM: null, rir: null, restSec: 90, progressionRule: "", ruleIds: [] }) as any;
+    const list = [mk("a", 5, 10), mk("b", 3, 8)];
+    enforceContactCap(list, 50);
+    expect(contacts(list)).toBeLessThanOrEqual(50);
+  });
+  it("missing experience is flagged and treated as novice", () => {
+    const unk = { ...SYNTHETIC_ALEX, history: { ...SYNTHETIC_ALEX.history, strengthTrainingYears: null } };
+    const r = interpretRunner(unk);
+    expect(r.missingData.join(" ")).toMatch(/experience/i);
+    expect(r.metrics.trainingTier).toBe("novice");
+  });
+});
+
+describe("program content", () => {
+  const rep = interpretRunner(SYNTHETIC_ALEX);
+  const p = generateRunnerProgram(SYNTHETIC_ALEX, rep);
+  it("every session has a warm-up", () => {
+    expect(p.weeks.every((w) => w.sessions.every((s) => (s.warmup?.length ?? 0) > 0))).toBe(true);
+  });
+  it("gives the weaker calf side an extra set", () => {
+    const calf = p.weeks[0].sessions[1].exercises.find((e) => e.exerciseId === "single_leg_calf_raise")!;
+    expect(calf.extraSetSide).toBe("right"); // fixture: L 22 / R 18
+  });
+  it("gates reactive plyometrics behind competency", () => {
+    const dj = p.weeks[4].sessions[0].exercises.find((e) => e.exerciseId === "drop_jump")!;
+    expect(dj.notes).toMatch(/Competency gate/);
+  });
+  it("states the 6-hour separation rule", () => {
+    expect(p.assumptions.join(" ")).toMatch(/6 hours/);
+  });
+  it("builds a taper when the race falls inside the block", () => {
+    const a = { ...SYNTHETIC_ALEX, goals: { ...SYNTHETIC_ALEX.goals, raceDate: "2026-12-09" } };
+    const q = generateRunnerProgram(a, interpretRunner(a), { startDate: "2026-10-14" }); // race in week 8
+    expect(q.durationWeeks).toBe(8);
+    expect(q.weeks[7].label).toBe("Race week");
+    expect(q.weeks[7].sessions).toHaveLength(1);
+    expect(q.weeks[6].phase).toBe("Taper");
+    const raceSets = q.weeks[7].sessions[0].exercises.find((e) => e.exerciseId === "back_squat")!.sets;
+    expect(raceSets).toBeLessThanOrEqual(2);
+    expect(q.weeks[7].sessions[0].exercises.some((e) => e.category === "plyometric")).toBe(false);
+    expect(q.milestones.some((m) => m.label.startsWith("Race"))).toBe(true);
+    expect(q.rulesUsed).toContain("running.taper.window");
+  });
+  it("shortens the block when the race is sooner", () => {
+    const a = { ...SYNTHETIC_ALEX, goals: { ...SYNTHETIC_ALEX.goals, raceDate: "2026-11-11" } };
+    const q = generateRunnerProgram(a, interpretRunner(a), { startDate: "2026-10-14" }); // 4 weeks
+    expect(q.durationWeeks).toBe(4);
+    expect(q.weeks).toHaveLength(4);
+  });
+  it("ignores a race date that is far away or already past", () => {
+    const far = { ...SYNTHETIC_ALEX, goals: { ...SYNTHETIC_ALEX.goals, raceDate: "2027-05-01" } };
+    expect(generateRunnerProgram(far, interpretRunner(far), { startDate: "2026-10-14" }).durationWeeks).toBe(8);
+    const past = { ...SYNTHETIC_ALEX, goals: { ...SYNTHETIC_ALEX.goals, raceDate: "2026-01-01" } };
+    const q = generateRunnerProgram(past, interpretRunner(past), { startDate: "2026-10-14" });
+    expect(q.durationWeeks).toBe(8);
+    expect(q.assumptions.join(" ")).toMatch(/past/);
   });
 });
