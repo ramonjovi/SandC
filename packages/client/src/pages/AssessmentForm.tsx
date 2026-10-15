@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Select, Textarea } from "@/components/ui";
 import { HowTo } from "@/components/HowTo";
+import { FIELD_TIPS } from "@/lib/fieldTips";
 import { api } from "@/lib/api";
 import { formatTime, parseTime } from "@/lib/utils";
 
@@ -154,6 +155,12 @@ export function AssessmentForm({ assessment, onSaved, onInterpreted }: { assessm
                   <div className={f.wide ? "sm:col-span-2 lg:col-span-3" : ""}>
                     <Label>{f.label}{f.unit ? ` (${f.unit})` : ""}</Label>
                     {control(f)}
+                    {FIELD_TIPS[f.path] && (
+                      <details className="mt-1 text-xs">
+                        <summary className="cursor-pointer text-primary">How to assess</summary>
+                        <p className="mt-1 rounded-md bg-muted/70 p-2 leading-relaxed text-muted-foreground">{FIELD_TIPS[f.path]}</p>
+                      </details>
+                    )}
                   </div>
                 </Fragment>
               ))}
