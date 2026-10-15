@@ -63,6 +63,7 @@ input, select, textarea { font: inherit; }
   @page { size: A4; margin: 14mm; }
   body { background: white !important; }
   .viz { --viz-surface: #ffffff; }
-  figure, section, table { break-inside: avoid; }
+  figure, tr { break-inside: avoid; }
+  h2, h3 { break-after: avoid; }
   tr { break-inside: avoid; }
 }

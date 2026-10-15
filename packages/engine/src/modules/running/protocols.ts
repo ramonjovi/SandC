@@ -198,7 +198,7 @@ export const RUNNING_PROTOCOLS: TestProtocol[] = [
 /** Which tests to repeat at a reassessment, from what was measured at baseline. */
 export function retestList(physical: {
   squatLoadKg: number | null; cmjHeightCm: number | null; broadJumpM: number | null; rsiFlightMs?: number | null; rsiContactMs?: number | null;
-  calfRaiseLeftReps: number | null; calfRaiseRightReps: number | null; sebtAsymmetryCm: number | null; nordicBreakAngleDeg?: number | null;
+  calfRaiseLeftReps: number | null; calfRaiseRightReps: number | null; sebtAsymmetryCm: number | null; nordicBreakAngleDeg?: number | null; hipAbductionLeftKg?: number | null; hipAbductionRightKg?: number | null;
   imtpPeakForceN: number | null; cmjPeakForceN: number | null; nordicForceN: number | null;
 }): string[] {
   const out: string[] = [];
@@ -208,6 +208,7 @@ export function retestList(physical: {
   if (physical.rsiFlightMs != null && physical.rsiContactMs != null) out.push("Pogo-hop RSI");
   if (physical.calfRaiseLeftReps != null || physical.calfRaiseRightReps != null) out.push("Single-leg calf raise");
   if (physical.sebtAsymmetryCm != null) out.push("SEBT / Y-balance");
+  if (physical.hipAbductionLeftKg != null || physical.hipAbductionRightKg != null) out.push("Hip abduction (dynamometer)");
   if (physical.nordicBreakAngleDeg != null || physical.nordicForceN != null) out.push("Nordic");
   if (physical.imtpPeakForceN != null && physical.cmjPeakForceN != null) out.push("IMTP and CMJ force");
   return out;

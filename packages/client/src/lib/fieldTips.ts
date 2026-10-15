@@ -30,6 +30,14 @@ export const FIELD_TIPS: Record<string, string> = {
   "biomechanics.kneeValgus": "Rear view: is there always a gap between the knees through the whole stride (the knee window)? If the gap closes, tick Yes.",
   "biomechanics.crossover": "Rear view: the left and right feet should not overlap or cross the midline when they land. A very narrow base (scissoring) = Yes.",
   "biomechanics.heelWhip": "Rear view, at toe-off: does the sole of the shoe rotate in or out by more than about 5 degrees? This is common in recreational runners and of low importance.",
+  "biomechanics.pelvicDropLeftStanceDeg": "Rear view, mid-stance on the left leg: the tilt of the line between the two pelvic markers, in degrees (use the picture editor's Angle from level/vertical). It is the dip of the swinging (right) side.",
+  "biomechanics.pelvicDropRightStanceDeg": "Rear view, mid-stance on the right leg: the same measure, giving the dip of the swinging (left) side. Compare the two sides.",
+  "biomechanics.heelWhipLeftDeg": "Rear view, toe-off of the left foot: angle of the shoe's long axis from vertical. Use the same instant of toe-off for both sides and, if you can, the average of several strides.",
+  "biomechanics.heelWhipLeftDirection": "Medial = the heel end of the shoe points toward the other leg; lateral = away from it. A single frame only shows the orientation, so confirm by stepping through 3 frames.",
+  "biomechanics.heelWhipRightDeg": "Same measure for the right foot, at the same instant of toe-off.",
+  "biomechanics.heelWhipRightDirection": "Medial = heel end toward the other leg; lateral = away from it.",
+  "biomechanics.heelEversionLeftDeg": "Rear view, mid-stance, tape on the lower leg and heel: 180 minus the heel-to-calf angle. Straight = 0.",
+  "biomechanics.heelEversionRightDeg": "Same for the right foot, at the same instant of stance.",
   "biomechanics.notes": "Write down the camera frame rate, treadmill speed and where any tape was placed, so you can repeat it exactly at retest.",
 
   // ---- physical tests
@@ -41,6 +49,8 @@ export const FIELD_TIPS: Record<string, string> = {
   "physical.rsiContactMs": "From the same video: count the frames the foot is on the ground for those 3 hops, convert to milliseconds and average. The app works out the reactive strength index.",
   "physical.calfRaiseLeftReps": "Single leg, straight knee, fingertips on a wall, 1 second up and 1 second down, until the range drops, the tempo is lost or the knee bends. Count full-range reps. Rest 2 to 3 minutes, then test the other leg.",
   "physical.calfRaiseRightReps": "Same test and the same tempo as the left leg. A difference of more than 10% is flagged.",
+  "physical.hipAbductionLeftKg": "Side-lying, hand-held dynamometer just above the knee, hip in neutral, resist for a few seconds. Use the same position, lever arm and number of trials (3 is better than 2) each time, and enter the average in kg.",
+  "physical.hipAbductionRightKg": "Same test on the right side. A difference of more than about 10-15% is worth noting; there is no validated runner norm.",
   "physical.sebtAsymmetryCm": "Reach with the free foot along three taped lines (forward, back-inside, back-outside), best of 3 per direction, on each leg. Enter the largest left-right difference in cm.",
   "physical.nordicBreakAngleDeg": "Film a slow Nordic lowering from the side. Measure the angle of the body from the floor at the moment control is lost. Use the best of 3 attempts.",
 };

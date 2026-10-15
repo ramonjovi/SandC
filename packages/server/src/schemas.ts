@@ -64,6 +64,14 @@ export const AssessmentSchema = z.object({
     kneeValgus: triBool,
     crossover: triBool,
     heelWhip: triBool,
+    pelvicDropLeftStanceDeg: num,
+    pelvicDropRightStanceDeg: num,
+    heelWhipLeftDeg: num,
+    heelWhipRightDeg: num,
+    heelWhipLeftDirection: z.enum(["medial", "lateral"]).nullable().default(null),
+    heelWhipRightDirection: z.enum(["medial", "lateral"]).nullable().default(null),
+    heelEversionLeftDeg: num,
+    heelEversionRightDeg: num,
     notes: z.string().default(""),
   }).default({}),
   physical: z.object({
@@ -80,7 +88,13 @@ export const AssessmentSchema = z.object({
     rsiFlightMs: num,
     rsiContactMs: num,
     nordicBreakAngleDeg: num,
+    hipAbductionLeftKg: num,
+    hipAbductionRightKg: num,
     notes: z.string().default(""),
+  }).default({}),
+  visit: z.object({
+    reason: z.string().default(""),
+    otherFindings: z.string().default(""),
   }).default({}),
 });
 

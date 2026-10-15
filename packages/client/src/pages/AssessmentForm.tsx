@@ -22,6 +22,9 @@ const SECTIONS: Array<{ title: string; hint?: string; collapsed?: boolean; field
     { path: "consent.date", label: "Date of consent", kind: "date" },
     { path: "consent.notes", label: "Notes (for example parent/guardian signed, limits the athlete set)", kind: "area", wide: true },
   ] },
+  { title: "Reason for the visit", hint: "In the athlete's report this appears on page 1 as why they came in.", fields: [
+    { path: "visit.reason", label: "Why they came in (symptoms, what they notice, how long)", kind: "area", wide: true },
+  ] },
   { title: "Goals", fields: [
     { path: "goals.event", label: "Event", kind: "text" },
     { path: "goals.targetDistanceM", label: "Distance", kind: "num", unit: "m" },
@@ -64,6 +67,14 @@ const SECTIONS: Array<{ title: string; hint?: string; collapsed?: boolean; field
     { path: "biomechanics.kneeValgus", label: "Dynamic knee valgus / closed knee window", kind: "tri" },
     { path: "biomechanics.crossover", label: "Crossover gait", kind: "tri" },
     { path: "biomechanics.heelWhip", label: "Heel whip", kind: "tri" },
+    { path: "biomechanics.pelvicDropLeftStanceDeg", label: "Pelvic drop when standing on the LEFT leg", kind: "num", unit: "deg" },
+    { path: "biomechanics.pelvicDropRightStanceDeg", label: "Pelvic drop when standing on the RIGHT leg", kind: "num", unit: "deg" },
+    { path: "biomechanics.heelWhipLeftDeg", label: "Heel whip, left", kind: "num", unit: "deg from vertical" },
+    { path: "biomechanics.heelWhipLeftDirection", label: "Heel whip direction, left", kind: "select", options: [["", "—"], ["medial", "Medial (heel toward midline)"], ["lateral", "Lateral (heel away from midline)"]] },
+    { path: "biomechanics.heelWhipRightDeg", label: "Heel whip, right", kind: "num", unit: "deg from vertical" },
+    { path: "biomechanics.heelWhipRightDirection", label: "Heel whip direction, right", kind: "select", options: [["", "—"], ["medial", "Medial (heel toward midline)"], ["lateral", "Lateral (heel away from midline)"]] },
+    { path: "biomechanics.heelEversionLeftDeg", label: "Heel tilt (rearfoot eversion) at mid-stance, left", kind: "num", unit: "deg" },
+    { path: "biomechanics.heelEversionRightDeg", label: "Heel tilt (rearfoot eversion) at mid-stance, right", kind: "num", unit: "deg" },
     { path: "biomechanics.notes", label: "Notes", kind: "area", wide: true },
   ] },
   { title: "Physical testing (treadmill, barbell, rack, phone)", hint: "How to run each test: see Test protocols. Keep every test identical at retest. Power tests are tracked for change, not judged against norms.", fields: [
@@ -75,8 +86,11 @@ const SECTIONS: Array<{ title: string; hint?: string; collapsed?: boolean; field
     { path: "physical.rsiContactMs", label: "Pogo hops: average contact time", kind: "num", unit: "ms" },
     { howto: "calf-raise", path: "physical.calfRaiseLeftReps", label: "Single-leg calf raise, left", kind: "num", unit: "reps" },
     { path: "physical.calfRaiseRightReps", label: "Single-leg calf raise, right", kind: "num", unit: "reps" },
+    { path: "physical.hipAbductionLeftKg", label: "Hip abduction (side-lying dynamometer), left", kind: "num", unit: "kg" },
+    { path: "physical.hipAbductionRightKg", label: "Hip abduction (side-lying dynamometer), right", kind: "num", unit: "kg" },
     { howto: "sebt", path: "physical.sebtAsymmetryCm", label: "SEBT / Y-balance largest L-R difference", kind: "num", unit: "cm" },
     { howto: "nordic-video", path: "physical.nordicBreakAngleDeg", label: "Nordic break angle (from video)", kind: "num", unit: "deg from floor" },
+    { path: "visit.otherFindings", label: "Other findings for the report (one per line, for example: Squat: shifts to the right until the left hip is cued)", kind: "area", wide: true },
     { path: "physical.notes", label: "Notes", kind: "area", wide: true },
   ] },
   { title: "Optional: force plate tests", collapsed: true, hint: "Leave blank if no force plate. Needed only for the Dynamic Strength Index.", fields: [

@@ -55,6 +55,15 @@ export interface Biomechanics {
   kneeValgus: boolean | null;
   crossover: boolean | null;
   heelWhip: boolean | null;
+  /** Per-side video measures (optional): degrees; pelvic drop is the dip on the swing side while standing on that leg. */
+  pelvicDropLeftStanceDeg?: number | null;
+  pelvicDropRightStanceDeg?: number | null;
+  heelWhipLeftDeg?: number | null;
+  heelWhipRightDeg?: number | null;
+  heelWhipLeftDirection?: "medial" | "lateral" | null;
+  heelWhipRightDirection?: "medial" | "lateral" | null;
+  heelEversionLeftDeg?: number | null;
+  heelEversionRightDeg?: number | null;
   notes: string;
 }
 
@@ -74,6 +83,9 @@ export interface PhysicalTests {
   rsiFlightMs?: number | null;
   rsiContactMs?: number | null;
   nordicBreakAngleDeg?: number | null;
+  /** Side-lying hip abduction, hand-held dynamometer (average of trials, kg). */
+  hipAbductionLeftKg?: number | null;
+  hipAbductionRightKg?: number | null;
   notes: string;
 }
 
@@ -86,6 +98,8 @@ export interface RunnerAssessment {
   health: HealthScreen;
   biomechanics: Biomechanics;
   physical: PhysicalTests;
+  /** Reason for the visit and other clinician findings that have no field of their own (shown in the athlete report). */
+  visit?: { reason: string; otherFindings: string };
 }
 
 export interface RunnerProgramOpts {
