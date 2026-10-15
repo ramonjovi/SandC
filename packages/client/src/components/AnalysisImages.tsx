@@ -52,12 +52,16 @@ export function AnalysisImages({ assessment, data }: { assessment: any; data: an
           {PHASES.map((p) => {
             const mine = (images ?? []).filter((i) => i.phase === p.id);
             return (
-              <div key={p.id} className="space-y-2 rounded-lg border p-3 text-sm">
+              <div key={p.id} className="space-y-2 rounded-lg border p-2.5 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <b>{p.label}</b><Badge variant="outline">{p.view === "other" ? "any view" : `${p.view} view`}</Badge>
+                  {mine.length > 0 && <span className="text-xs text-muted-foreground">{mine.length} saved</span>}
                   <Button size="sm" variant="outline" className="ml-auto" onClick={() => { target.current = p.id; input.current?.click(); }}><Camera className="h-3.5 w-3.5" /> Add picture</Button>
                 </div>
-                <p className="text-xs text-muted-foreground"><b>Capture:</b> {p.capture} <b>Look for:</b> {p.lookFor}</p>
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer text-primary">How to capture and what to look for</summary>
+                  <p className="mt-1"><b>Capture:</b> {p.capture} <b>Look for:</b> {p.lookFor}</p>
+                </details>
                 {p.id === "vertical-oscillation" && <OscillationCalc />}
                 {mine.map((im) => <ImageRow key={im.id} im={im} phase={p} data={data} onChanged={reload} />)}
               </div>
@@ -79,20 +83,22 @@ function ImageRow({ im, phase, data, onChanged }: { im: any; phase: (typeof PHAS
   async function save() { await api(`/images/${im.id}`, { method: "PUT", body: { caption, measure, discussion } }); setSaved(true); onChanged(); }
   async function remove() { if (confirm("Delete this picture?")) { await api(`/images/${im.id}`, { method: "DELETE" }); onChanged(); } }
   return (
-    <div className="space-y-2 rounded-md bg-muted/40 p-2">
-      <img src={`/api/images/${im.id}/file`} alt={caption || phase.label} className="max-h-56 w-auto rounded border bg-white" />
-      <div className="grid gap-2 sm:grid-cols-2">
-        <div><Label>Caption</Label><Input value={caption} onChange={(e) => mark(setCaption)(e.target.value)} /></div>
-        <div><Label>Measurement (shown in the report)</Label><Input value={measure} onChange={(e) => mark(setMeasure)(e.target.value)} placeholder="e.g. Angle 44°" /></div>
-      </div>
-      <div>
-        <Label>What this might mean (printed in the report: edit freely)</Label>
-        <Textarea className="min-h-24" value={discussion} onChange={(e) => mark(setDiscussion)(e.target.value)} />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" disabled={saved} onClick={save}>{saved ? "Saved" : "Save changes"}</Button>
-        <Button size="sm" variant="outline" onClick={() => mark(setDiscussion)(phase.discussion(data))}>Use suggested text from the form</Button>
-        <Button size="sm" variant="ghost" onClick={remove}><Trash2 className="h-3.5 w-3.5" /> Delete</Button>
+    <div className="flex gap-3 rounded-md bg-muted/40 p-2">
+      <img src={`/api/images/${im.id}/file`} alt={caption || phase.label} className="h-44 w-auto shrink-0 self-start rounded border bg-white" />
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div><Label>Caption</Label><Input value={caption} onChange={(e) => mark(setCaption)(e.target.value)} /></div>
+          <div><Label>Measurement (in the report)</Label><Input value={measure} onChange={(e) => mark(setMeasure)(e.target.value)} placeholder="e.g. Angle 44°" /></div>
+        </div>
+        <div>
+          <Label>What this might mean (printed: edit freely)</Label>
+          <Textarea className="min-h-16" rows={3} value={discussion} onChange={(e) => mark(setDiscussion)(e.target.value)} />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <Button size="sm" disabled={saved} onClick={save}>{saved ? "Saved" : "Save changes"}</Button>
+          <Button size="sm" variant="outline" onClick={() => mark(setDiscussion)(phase.discussion(data))}>Use suggested text</Button>
+          <Button size="sm" variant="ghost" onClick={remove}><Trash2 className="h-3.5 w-3.5" /> Delete</Button>
+        </div>
       </div>
     </div>
   );

@@ -49,9 +49,20 @@ input, select, textarea { font: inherit; }
   --viz-surface: #fcfcfb; --viz-ink: #0b0b0b; --viz-ink2: #52514e; --viz-muted: #898781;
   --viz-grid: #e1e0d9; --viz-axis: #c3c2b7; --viz-s1: #2a78d6; --viz-s2: #eb6834;
 }
+/* Report page: brand accent and soft tints (kept when printed) */
+.viz {
+  --viz-brand: #0f4c6e; --viz-brand-soft: #eaf3f8; --viz-tint: #f5f5f2; --viz-good: #1b7a46; --viz-line: #e4e3dc;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.report-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+.report-table th { padding: 0.35rem 0.5rem; text-align: left; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--viz-ink2); border-bottom: 1.5px solid var(--viz-ink); }
+.report-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--viz-line); vertical-align: top; }
+.report-table tbody tr:nth-child(even) td { background: var(--viz-tint); }
+.report-table td.num, .report-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @media print {
-  @page { margin: 14mm; }
+  @page { size: A4; margin: 14mm; }
   body { background: white !important; }
   .viz { --viz-surface: #ffffff; }
   figure, section, table { break-inside: avoid; }
+  tr { break-inside: avoid; }
 }
