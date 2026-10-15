@@ -94,7 +94,7 @@ describe("interpretation (Alex)", () => {
   const r = interpretRunner(SYNTHETIC_ALEX);
   it("computes metrics", () => {
     expect(r.metrics.dsi).toBeCloseTo(0.65, 2);
-    expect(r.metrics.squat1RM).toBeCloseTo(116.7, 1);
+    expect(r.metrics.squat1RM).toBeCloseTo(109.1, 1); // 100 kg x 5 via the endurance load-to-rep table
     expect(r.metrics.targetSpeedKmh).toBeCloseTo(15.6, 1);
   });
   it("uses the speed tilt toward strength with no deficit", () => {
@@ -154,7 +154,7 @@ describe("program generation", () => {
   it("loads are plate-rounded and derived from squat 1RM", () => {
     const sq = p.weeks[0].sessions[0].exercises.find((e) => e.exerciseId === "back_squat")!;
     expect(sq.loadKg! % 2.5).toBe(0);
-    expect(sq.loadKg).toBe(roundLoad(116.7 * 0.8));
+    expect(sq.loadKg).toBe(roundLoad(109.1 * 0.8));
   });
   it("uses contrast pairs in weeks 5-8 that reference real exercises", () => {
     const s = p.weeks[4].sessions[0];
@@ -460,5 +460,78 @@ describe("test protocols", () => {
   it("retest list reflects only what was measured", () => {
     expect(running.retestList(SYNTHETIC_SAM.physical)).not.toContain("IMTP and CMJ force");
     expect(running.retestList(SYNTHETIC_ALEX.physical)).toContain("IMTP and CMJ force");
+  });
+});
+
+describe("second verification pass (sources)", () => {
+  const { estimate1RM, percentOf1RM } = running;
+  it("1RM estimate follows the endurance-athlete load-to-repetition table (Developing Endurance Table 6.3)", () => {
+    expect(percentOf1RM(1)).toBe(100);
+    expect(percentOf1RM(3)).toBe(95);
+    expect(percentOf1RM(6)).toBe(90);
+    expect(percentOf1RM(8)).toBe(85);
+    expect(percentOf1RM(19)).toBe(65);
+    expect(percentOf1RM(40)).toBe(65); // never extrapolated
+    expect(percentOf1RM(5)).toBeCloseTo(91.67, 1);
+    expect(estimate1RM(100, 1)).toBe(100);
+    expect(estimate1RM(100, 5)).toBeCloseTo(109.1, 1);
+    expect(estimate1RM(100, 5)).toBeLessThan(epley1RM(100, 5)); // Epley overestimates for runners
+  });
+  it("DXA is flagged only below -1 (CAT2 primary indicator), not at -1", () => {
+    const at = (z: number) => interpretRunner({ ...SYNTHETIC_ALEX, health: { ...SYNTHETIC_ALEX.health, dxaZScore: z } }).safetyFlags.some((f) => f.id === "dxa");
+    expect(at(-1)).toBe(false);
+    expect(at(-1.2)).toBe(true);
+  });
+  it("cadence is recorded but never flagged as 'low' (no source cutoff)", () => {
+    const r = interpretRunner({ ...SYNTHETIC_ALEX, biomechanics: { ...SYNTHETIC_ALEX.biomechanics, cadenceSpm: 150 } });
+    expect(JSON.stringify(r.findings)).not.toMatch(/low cadence/);
+    expect(r.findings.some((f) => f.id === "cadence")).toBe(true);
+  });
+  it("holds back reactive plyometrics until the squat base is met (NSCA 1.5x body weight)", () => {
+    const weak = { ...SYNTHETIC_ALEX, physical: { ...SYNTHETIC_ALEX.physical, squatLoadKg: 70, squatReps: 5 } }; // ~1.06x BM
+    const q = generateRunnerProgram(weak, interpretRunner(weak));
+    const ex = q.weeks.flatMap((w) => w.sessions.flatMap((s) => s.exercises));
+    expect(ex.some((e) => ["drop_jump", "hurdle_hops", "bounding"].includes(e.exerciseId))).toBe(false);
+    expect(ex.some((e) => e.category === "plyometric")).toBe(true); // low-level drills remain
+    expect(q.assumptions.join(" ")).toMatch(/held back/);
+    // lowering the required ratio via the editable parameter releases them
+    const p = paramsFor({ "running.plyo.prerequisites": { squatRatio: 1.0 } });
+    const q2 = generateRunnerProgram(weak, interpretRunner(weak, p), { params: p });
+    expect(q2.weeks.flatMap((w) => w.sessions.flatMap((s) => s.exercises)).some((e) => e.exerciseId === "drop_jump")).toBe(true);
+  });
+  it("no squat test also holds reactive plyometrics back", () => {
+    const none = { ...SYNTHETIC_ALEX, physical: { ...SYNTHETIC_ALEX.physical, squatLoadKg: null, squatReps: null } };
+    const q = generateRunnerProgram(none, interpretRunner(none));
+    expect(q.weeks.flatMap((w) => w.sessions.flatMap((s) => s.exercises)).some((e) => e.exerciseId === "drop_jump")).toBe(false);
+  });
+  it("classification reflects what was verified", () => {
+    const byId = Object.fromEntries(allRules().map((r) => [r.id, r]));
+    expect(byId["core.load.weekly-cap"].status).toBe("source_verified");
+    expect(byId["running.vdot.break-adjustment"].status).toBe("source_verified");
+    expect(byId["running.gait.cadence"].status).toBe("source_verified");
+    expect(byId["running.imtp.reference"].status).toBe("source_verified");
+    expect(byId["running.reds.cat2-reference"].status).toBe("source_verified");
+    expect(byId["running.dsi"].status).toBe("needs_verification");
+    expect(byId["running.strength.squat-ratio"].status).toBe("needs_verification");
+    expect(byId["running.symmetry"].status).toBe("needs_verification");
+    expect(byId["running.reds.cat2-reference"].defaults).toBeUndefined(); // reference only, not editable or applied
+  });
+  it("the engine never computes a REDs tier or colour", () => {
+    const r = interpretRunner(SYNTHETIC_SAM);
+    expect(JSON.stringify(r)).not.toMatch(/"(tier|redsTier|colour|color)"|green light|orange light|red light/i);
+  });
+  it("race week schedules one light session without plyometrics or Nordics, early in the week", () => {
+    const a = { ...SYNTHETIC_ALEX, goals: { ...SYNTHETIC_ALEX.goals, raceDate: "2026-12-09" } };
+    const q = generateRunnerProgram(a, interpretRunner(a), { startDate: "2026-10-14" });
+    const w = q.weeks[7];
+    expect(w.sessions).toHaveLength(1);
+    expect(w.note).toMatch(/early in the week/);
+    expect(w.sessions[0].exercises.some((e) => e.exerciseId === "nordic_hamstring" || e.category === "plyometric")).toBe(false);
+  });
+  it("cadence objective uses the sourced +10% by default", () => {
+    const a = { ...SYNTHETIC_ALEX, health: { ...SYNTHETIC_ALEX.health, painModifiedTraining: true, painSite: "knee" as const } };
+    const q = generateRunnerProgram(a, interpretRunner(a));
+    const cad = q.objectives.find((o) => o.id === "cadence")!;
+    expect(cad.target).toBe(Math.round(164 * 1.1));
   });
 });

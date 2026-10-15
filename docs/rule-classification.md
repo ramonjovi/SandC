@@ -33,12 +33,35 @@ The authoritative list is `packages/engine/src/core/rules.ts` and `packages/engi
 | Concurrent scheduling | KB said "always run before lifting". The book says leave **>= 6 hours**, avoid hard gym and hard run on the same day, and keep the run easy after heavy lifting. Program notes corrected. |
 | Taper | Book: 1-4 weeks, volume down, intensity kept, 40-60% load reduction 8-14 days out, keep frequency. The KB's "stop heavy lifting 4-5 days before" is **not in the books**; kept as an editable default marked needs-verification. |
 
-## Still to verify (suggested order)
+## Third verification pass (2026-10-15): the remaining unverified rules
 
-1. IOC REDs CAT2 primary/secondary criteria (before any REDs support is considered).
-2. DSI bands; squat strength ratios (NSCA Essentials); SEBT 4 cm; calf-asymmetry 10%.
-3. NSCA/HPT source for the 80-90% x 3-6 prescription and the unload cut (40-50%).
-4. Race-week lifting cut-off (4-5 days).
+Method: the REDs consensus table and figure, and the book/paper text, were read directly (figures rendered to images where the text layer was garbled).
+
+| Item | Result | Status / action |
+| --- | --- | --- |
+| **IOC REDs CAT2 tiers** | The KB's Green/Yellow/Orange/Red criteria **do not match** the real tool. CAT2 counts indicators (Table 4, Figure 6): Green = 0 primary and at most 1 secondary; Yellow = 0 primary + 2 or more secondary, 1 primary + up to 2 secondary, or 2 primary + up to 1 secondary; Orange = 1 primary + 3 or more secondary, 2 primary + 2 or more secondary, or 3 primary + up to 1 secondary; Red = 3 primary + 2 or more secondary, or 4 or more primary; a "severe primary" counts as 2. KB errors: reduced libido/morning erections are an *unscored potential* indicator; "weight loss over 5%" is not an indicator; BSI risk is "high-risk site (femoral neck, sacrum, pelvis) vs low-risk", not trabecular/cortical; DXA tiers of -1 to -2 / below -2 are not in the tool (primary indicator = Z-score below -1). | Added `running.reds.cat2-reference` (source-verified, display only). **Still not automated**: it needs hormone, DXA, EDE-Q and ECG data the app does not collect, and a physician-led differential diagnosis. DXA flag corrected to below -1. |
+| 10% weekly load increase | IOC load consensus (Schwellnus 2016), recommendation 2.iv.b: increments should be under 10%, individualised. | **Now source-verified** (alert only). |
+| 80-90% 1RM x 3-6 reps for runners | Developing Endurance Table 6.3: endurance athletes manage more reps at a given %1RM (90% = 6, 85% = 8, 80% = 11); Table 6.15 runner block is 3 x 5 with intensity M-MH-H-M (80-85 / 85-90 / 90-95 / 80-85%). Our 80-87.5% is inside or below the source. | Wording updated; stays a proposed default. |
+| **1RM estimate (Epley)** | Epley is not in the supplied texts, and for endurance athletes it overestimates (a 5RM is about 91.7% of 1RM by Table 6.3, not 85.7%). | **Replaced** by the Table 6.3 interpolation (`running.test.1rm-estimate`, source-verified). Alex's 100 kg x 5 squat is now 109 kg, not 117 kg, so loads are about 6.5% lighter. |
+| Unload cut 40-50% | Developing Endurance: unload week after 3 weeks; recovery weeks at 50-75% of customary intensity *and* volume. Our 55% of volume with intensity kept sits inside the volume range. | Stays an editable default (exact percentage not in the text). |
+| IMTP > 35 N/kg | Essentials Table 14.6: the only norms are male soccer players (33-51 N/kg); 35 is about their 25th percentile. No runner norms. | Reworded as context only; **source-verified** that it is not a runner standard. |
+| Squat deficit 1.2x / 1.0x BM | No distance-runner norms in any supplied book. Related: NSCA Program Design recommends about 1.5x BW squat before higher-intensity plyometrics. | Stays **needs verification**. New rule `running.plyo.prerequisites` (source-verified, editable ratio) now holds back drop jumps, hurdle hops and bounding until that base is met (or if no squat test exists). |
+| DSI bands 0.60 / 0.80 | Searched all four books: ratio and purpose only; **no bands**. HPT also warns about ratio mathematics. | Stays **needs verification**. |
+| Calf-raise asymmetry 10% | NSCA Essentials: side-to-side differences under 10% in strength/functional performance may be acceptable (return-to-sport context); NSCA Program Design: 15% or more may indicate significant injury risk, much debated. | 10% supported; SEBT 4 cm is **not** in the books, so the combined rule stays needs-verification. |
+| CMJ fatigue 5% | HPT: use the 3-trial average CMJ height and compare with the athlete's smallest worthwhile change (0.5 x CV%), not a universal 5%. | Method noted; 5% stays a **needs-verification** default. |
+| Cadence | Souza: +10% cadence reduces COM excursion, braking impulse and knee energy absorption; about 180 spm is debated (from economy studies). **No 165 spm cutoff.** | The "low cadence < 165" observation was **removed**; cadence is recorded only. Cadence trial now defaults to +10% (**source-verified**). |
+| Knee flexion | Souza: about 45 degrees normal; below 40 degrees associated with some patellofemoral pain subgroups. | Observation threshold confirmed. |
+| Race-week lifting cut-off (4-5 days) | Not in the books. Developing Endurance marathon taper examples (Tables 8.9-8.10) show one low-volume S&C session on day 1 of race week (about 6 days before), then none. | Program now places one light session early in race week; timing for shorter events is a clinician decision (**proposed default**). |
+| Heavy soleus work / "6-8x body weight" | Table 6.15 runner block includes single-leg seated calf raises 3 x 5, so heavy calf work is supported; the force claim and "mandatory for all" are not in the texts. | Wording updated; stays a proposed default. |
+| Progression +2.5-5% | Essentials ch. 18: relative load increases of 2.5-10% can be used; 2-for-2 rule is conservative but can promote training to failure. | Allowed range tightened to 2.5-10%; the RIR split stays a software interpretation. |
+
+## Still unverified (after the third pass)
+
+1. Squat deficit ratios for runners, DSI bands, SEBT 4 cm (no source in the supplied texts).
+2. CMJ fatigue 5% (method verified, number not).
+3. Starting-load ratios for secondary lifts (software estimates; always confirm in week 1).
+4. Exact unload percentage and race-week timing for events shorter than a marathon.
+5. REDs CAT2 automation (deliberately not built).
 
 ## Field-test battery (no force plate): verification notes
 

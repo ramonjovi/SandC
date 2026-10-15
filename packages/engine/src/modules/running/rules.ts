@@ -101,7 +101,18 @@ export const RUNNING_RULES: Rule[] = [
     source: "IOC REDs CAT2 (Mountjoy 2023) is the framework; the engine does not implement its scoring",
     statement:
       "Menstrual, hormonal, weight, BSI, eating-disorder, cardiac and DXA entries raise review flags. The engine does not assign a REDs tier or clearance.",
-    verification: "The KB's Green/Yellow/Orange/Red criteria were NOT verified against the consensus and are intentionally not automated.",
+    verification:
+      "Checked against the IOC REDs CAT2 (Mountjoy 2023, Table 4 and Figure 6): the KB's Green/Yellow/Orange/Red criteria do NOT match the real tool (see running.reds.cat2-reference). The screening questions here are prompts only: e.g. reduced libido/morning erections are an unscored 'potential' indicator, 'weight loss over 5%' is not a CAT2 indicator, and the tool needs hormone, DXA, EDE-Q and ECG data this app does not collect. DXA is flagged at Z-score below -1 (the CAT2 primary-indicator cut). Intentionally not automated.",
+  },
+  {
+    id: "running.reds.cat2-reference",
+    title: "IOC REDs CAT2 tiers (reference only, not applied)",
+    status: "source_verified",
+    source: "Mountjoy et al. 2023, IOC consensus on REDs (Br J Sports Med 57:1073), Table 4 and Figure 6",
+    statement:
+      "CAT2 counts indicators. Green: 0 primary and at most 1 secondary. Yellow: 0 primary + 2 or more secondary; or 1 primary + up to 2 secondary; or 2 primary + up to 1 secondary. Orange: 1 primary + 3 or more secondary; or 2 primary + 2 or more secondary; or 3 primary + up to 1 secondary. Red: 3 primary + 2 or more secondary, or 4 or more primary. A 'severe primary' indicator (12 or more missed cycles; clinically low testosterone) counts as 2. Primary indicators include 3-11 missed cycles from FHA, subclinically low testosterone or T3, 1 high-risk (femoral neck, sacrum, pelvis) or 2 low-risk BSI in 2 years, BMD Z-score below -1, and a high EDE-Q or diagnosed eating disorder. Serious medical findings (e.g. very low BMI, severe bradycardia, ECG abnormality) need immediate medical attention.",
+    verification:
+      "Read from the paper's table and figure on 2026-10-15. Shown for clinician reference. The engine does NOT compute a tier: the tool is for a physician-led team, needs data the app does not collect, and every indicator needs a non-LEA differential diagnosis.",
   },
   {
     id: "running.dsi",
@@ -109,7 +120,7 @@ export const RUNNING_RULES: Rule[] = [
     status: "needs_verification",
     source: "High-Performance Training for Sports ch. 1 (ratio only); bands from knowledge file 01",
     statement: "DSI = CMJ peak force / IMTP peak force, used to decide whether an athlete needs ballistic, concurrent or maximal-strength emphasis. Software bands: <0.60 strength deficit; >0.80 power deficit.",
-    verification: "The ratio and its purpose are confirmed in High-Performance Training for Sports ch. 1. The 0.60 / 0.80 bands do NOT appear in that text and remain unverified; they are editable defaults.",
+    verification: "The ratio and its purpose are confirmed in High-Performance Training for Sports ch. 1. Searching all four supplied books found no 0.60 / 0.80 bands; they remain unverified editable defaults. The book also warns that ratios have mathematical limitations.",
     defaults: { strengthDeficitBelow: 0.6, powerDeficitAbove: 0.8 },
     paramMeta: {
       strengthDeficitBelow: { label: "DSI below this = strength deficit", min: 0.3, max: 0.9, step: 0.05, unit: "ratio" },
@@ -120,10 +131,10 @@ export const RUNNING_RULES: Rule[] = [
     id: "running.strength.squat-ratio",
     title: "Relative squat strength reference",
     status: "needs_verification",
-    source: "Knowledge file 01, Block 2.3 (NSCA Essentials Ch.14 attribution)",
-    statement: "Reference: >1.5x body mass (male), >1.2x (female). Below ~1.2x (male) / ~1.0x (female) treated as a strength priority.",
+    source: "Knowledge file 01, Block 2.3; NSCA Essentials ch. 14 (Table 14.4 sport norms)",
+    statement: "Below about 1.2x body mass (male) / 1.0x (female) the squat is treated as a strength priority.",
     verification:
-      "KB uses 1.2x as a deficit trigger in one table and as a female target in another. Deficit values here are software defaults, shown as editable.",
+      "No distance-runner squat norms exist in the supplied texts (Table 14.4 covers team and power sports; the only related guidance is NSCA Program Design's 1.5x body-weight squat before higher-intensity plyometrics, see running.plyo.prerequisites). The deficit values are software defaults.",
     defaults: { deficitMale: 1.2, deficitFemale: 1.0 },
     paramMeta: {
       deficitMale: { label: "Squat 1RM / body mass below this = strength priority (male)", min: 0.5, max: 2, step: 0.05, unit: "x BM" },
@@ -133,18 +144,18 @@ export const RUNNING_RULES: Rule[] = [
   {
     id: "running.imtp.reference",
     title: "IMTP reference values",
-    status: "needs_verification",
-    source: "Knowledge file 01, Block 2.3",
-    statement: "Reference only: peak force >35 N/kg. Displayed as context, never used to gate decisions.",
-    verification: "Not verified; the KB inventory itself lists runner-specific force-plate norms as a missing evidence category.",
+    status: "source_verified",
+    source: "NSCA Essentials of Strength Training and Conditioning, Table 14.6",
+    statement: "The only IMTP norms in the supplied texts are for male senior/junior soccer players (relative peak force about 33-51 N/kg across percentiles; 25th-percentile regional seniors about 35 N/kg). There are no runner norms; values are shown as context only and never gate a decision.",
+    verification: "Table read on 2026-10-15. The knowledge file's '>35 N/kg' is a soccer-derived value, not a runner standard.",
   },
   {
     id: "running.symmetry",
-    title: "Asymmetry flags (SEBT > 4 cm, calf raise > 10%)",
+    title: "Asymmetry flags (calf raise >10%, SEBT >4 cm)",
     status: "needs_verification",
-    source: "Knowledge file 01, Block 4.4 (SEBT 4 cm); 10% calf asymmetry is a software default",
+    source: "NSCA Essentials (side-to-side differences under 10% in strength and functional performance may be considered acceptable); NSCA Guide to Program Design ch. 2 (bilateral strength deficits of 15% or more may indicate significant injury risk); knowledge file 01 (SEBT 4 cm)",
     statement: "Flag side-to-side differences and add one extra set on the weaker limb.",
-    verification: "Cutoffs not verified.",
+    verification: "The 10% figure is supported by NSCA Essentials (return-to-sport context, applied here to the calf raise test). NSCA Program Design cites 15% as a higher-risk deficit but notes much debate. The SEBT 4 cm cut is NOT in the books (they give normative tables only) and stays unverified, which keeps this rule at needs-verification.",
     defaults: { sebtCm: 4, calfPct: 10 },
     paramMeta: {
       sebtCm: { label: "SEBT / Y-balance asymmetry flag", min: 1, max: 10, step: 0.5, unit: "cm" },
@@ -157,17 +168,18 @@ export const RUNNING_RULES: Rule[] = [
     status: "source_verified",
     source: "Souza 2016 (EBP for Biomechanical Analysis); KB inventory section 2.2 and 5.1",
     statement:
-      "No prospectively validated kinematic cutoffs predict injury. Findings are reported as observations; form change is suggested only with symptoms.",
-    verification: "Stated in the KB inventory; consistent with the source's limitations. Not page-checked.",
+      "No prospectively validated kinematic cutoffs predict injury. Findings are reported as observations; form change is suggested only with symptoms. Normal peak knee flexion in stance is about 45 degrees, and less than 40 degrees has been associated with certain patellofemoral pain subgroups. Pelvic drop may be a surrogate for hip or core weakness and its clinical significance has been questioned. Cadence is recorded with no target: about 180 steps per minute is debated and rests on economy rather than injury studies.",
+    verification:
+      "Read in Souza 2016 on 2026-10-15. The knowledge file's 'cadence below 165 spm = overstriding' is NOT in the source and has been removed; cadence is now a recorded variable only.",
   },
   {
     id: "running.gait.cadence",
-    title: "Cadence +5-10% for overstriding with symptoms",
-    status: "proposed_default",
-    source: "Souza 2016 / KB Block 2.2",
-    statement: "If overstriding is observed AND the runner is symptomatic, suggest raising cadence by 5-10% with a metronome.",
-    verification: "Magnitude from KB; not page-checked.",
-    defaults: { cadenceIncreasePct: 7.5 },
+    title: "Cadence +10% trial for overstriding with symptoms",
+    status: "source_verified",
+    source: "Souza 2016, An Evidence-Based Videotaped Running Biomechanics Analysis",
+    statement: "Increasing cadence by 10% reduced centre-of-mass vertical excursion, braking impulse and knee energy absorption and lowered peak hip adduction and its moments. The app suggests a cadence trial only when overstriding is seen AND the runner is symptomatic.",
+    verification: "The 10% effect is stated in the paper. Using it as a treatment suggestion for symptomatic overstriders is clinical judgement; the clinician decides. Values below 10% are allowed but untested in the source.",
+    defaults: { cadenceIncreasePct: 10 },
     paramMeta: { cadenceIncreasePct: { label: "Cadence increase target", min: 5, max: 10, step: 0.5, unit: "%" } },
   },
   {
@@ -222,7 +234,8 @@ export const RUNNING_RULES: Rule[] = [
     source: "KB Part 5.1 (NSCA Program Design; Developing Endurance)",
     statement:
       "Weeks 1-4 emphasise maximal strength and robustness; weeks 5-8 use complex/contrast pairs. Intensity 80-87.5% 1RM; unload weeks cut sets ~45% and keep intensity.",
-    verification: "Block periodization is source-attributed; the week-by-week percentages are a software default, editable per exercise.",
+    verification:
+      "Developing Endurance Table 6.3 shows endurance athletes can do more reps at a given %1RM (90% = 6, 85% = 8, 80% = 11), and Table 6.4 / 6.15 give a runner's strength block with intensity bands M (80-85%), MH (85-90%), H (90-95%). Our 80-87.5% stays inside or below those bands (novices lower), so it is conservative relative to the source. Week-by-week percentages are software defaults.",
   },
   {
     id: "running.program.soleus",
@@ -230,7 +243,8 @@ export const RUNNING_RULES: Rule[] = [
     status: "proposed_default",
     source: "Knowledge file 01 Block 4.4 (software default flagged by the KB itself)",
     statement: "Include heavy seated soleus raises unless the calf/Achilles site is painful.",
-    verification: "Marked a software default in the KB.",
+    verification:
+      "Developing Endurance Table 6.15 (a runner's basic strength block) includes single-leg seated calf raises at 3 sets x 5 reps, so heavy calf work for runners is source-supported. Making it 'mandatory' for everyone, and the KB claim that soleus force reaches 6-8x body weight, are not in the supplied texts.",
   },
   {
     id: "running.program.starting-loads",
@@ -239,7 +253,7 @@ export const RUNNING_RULES: Rule[] = [
     source: null,
     statement:
       "Secondary lift loads are estimated as a ratio of the athlete's squat 1RM. They are starting estimates only; confirm in week 1 and edit.",
-    verification: "Ratios are software guesses, not from a source. Clinician must verify each load.",
+    verification: "Ratios are software guesses, not from a source (searched all four books). Clinician must verify each load.",
   },
   {
     id: "running.plyo.contacts",
@@ -293,11 +307,29 @@ export const RUNNING_RULES: Rule[] = [
   },
   {
     id: "running.taper.race-week",
-    title: "Race week: stop heavy lower-body work 4-5 days before",
-    status: "needs_verification",
-    source: "Knowledge file 01, Block 5.2",
-    statement: "Finish heavy lower-body and plyometric work at least 4-5 days before the race.",
-    verification: "The 4-5 day figure was not found in the supplied books. Used as an editable default.",
+    title: "Race week: one light gym session early in the week",
+    status: "proposed_default",
+    source: "NSCA Developing Endurance 2nd ed., ch. 8 (Tables 8.9-8.10, marathon taper examples); knowledge file 01 Block 5.2",
+    statement: "In the final marathon week the books' examples schedule a single low-volume S&C session on day 1 (about 6 days before the race) and none afterwards. The app does the same: one light session early in race week, no plyometrics, no eccentric hamstring work.",
+    verification: "The knowledge file's '4-5 days before' is not in the books; the book example is about 6 days for a marathon. Shorter events are not specified, so the timing is an editable clinician decision.",
+  },
+  {
+    id: "running.test.1rm-estimate",
+    title: "1RM estimate from a 3-5RM uses the endurance-athlete load-to-repetition table",
+    status: "source_verified",
+    source: "NSCA Developing Endurance 2nd ed., Table 6.3 (adapted from Thibaudeau 2006)",
+    statement: "Endurance athletes can do more repetitions at a given %1RM than other athletes: 100% = 1, 95% = 3, 90% = 6, 85% = 8, 80% = 11, 75% = 14, 70% = 16, 65% = 19. The app converts a tested load and rep count to a 1RM by interpolating this table (a 5RM is about 91.7% of 1RM).",
+    verification: "Table read (image) on 2026-10-15. This replaces the Epley formula, which is not in the supplied texts and would overestimate a runner's 1RM by roughly 7% from a 5RM. Between table points the app interpolates linearly; beyond 19 reps it stops extrapolating (conservative).",
+  },
+  {
+    id: "running.plyo.prerequisites",
+    title: "Reactive plyometrics need a strength base",
+    status: "source_verified",
+    source: "NSCA's Guide to Program Design, ch. 5 (plyometrics); NSCA Developing Endurance 2nd ed., ch. 8",
+    statement: "It has been recommended that athletes be able to squat about 1.5 times body weight before starting a plyometric program; low-intensity drills (skips, hops, jumps) can be done safely without a minimum, but depth (drop) jumps should not be attempted by beginners. The app holds back drop jumps, hurdle hops and bounding until the squat reaches the set ratio, and keeps low-level drills only.",
+    verification: "Read in the book text. The book says 'e.g., 1.5 times body weight', so the ratio is a recommendation, editable here. If no squat test is entered the app cannot confirm the base and keeps low-level plyometrics only.",
+    defaults: { squatRatio: 1.5 },
+    paramMeta: { squatRatio: { label: "Squat 1RM / body mass needed before reactive plyometrics", min: 1, max: 2, step: 0.1, unit: "x BM" } },
   },
   {
     id: "running.test.squat-protocol",

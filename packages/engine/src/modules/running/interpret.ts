@@ -1,5 +1,6 @@
 import type { EngineReport, Finding, Priority, SafetyFlag, SiteRestriction, Strategy } from "../../core/types";
-import { epley1RM, round1, round2 } from "../../core/util";
+import { round1, round2 } from "../../core/util";
+import { estimate1RM } from "./onerm";
 import { SITE_EXCLUSIONS } from "./exercises";
 import type { RunnerAssessment } from "./types";
 import type { Params } from "../../core/params";
@@ -44,7 +45,7 @@ export function computeMetrics(a: RunnerAssessment): Metrics {
   else if (h.recentRace) targetSpeedKmh = (h.recentRace.distanceM / 1000) / (h.recentRace.timeSec / 3600);
   m.targetSpeedKmh = targetSpeedKmh != null ? round1(targetSpeedKmh) : null;
 
-  const squat1RM = ph.squatLoadKg != null && ph.squatReps ? epley1RM(ph.squatLoadKg, ph.squatReps) : null;
+  const squat1RM = ph.squatLoadKg != null && ph.squatReps ? estimate1RM(ph.squatLoadKg, ph.squatReps) : null;
   m.squat1RM = squat1RM != null ? round1(squat1RM) : null;
   m.squatRel = squat1RM != null && pr.bodyMassKg ? round2(squat1RM / pr.bodyMassKg) : null;
   m.imtpPeakN = ph.imtpPeakForceN;
@@ -86,7 +87,7 @@ export function interpretRunner(a: RunnerAssessment, params: Params = defaultPar
   if (hs.lowMorningErectionsOrLibido) hi("male-hormonal", "Reduced morning erections / libido reported.");
   if (hs.unintendedWeightLossOver5Pct) hi("weight-loss", "Unintended weight loss over 5% reported.");
   if (hs.bsiHistoryCount > 0) hi("bsi-history", `Bone stress injury history recorded (${hs.bsiHistoryCount}).`);
-  if (hs.dxaZScore != null && hs.dxaZScore <= -1) hi("dxa", `DXA Z-score ${hs.dxaZScore} entered.`);
+  if (hs.dxaZScore != null && hs.dxaZScore < -1) hi("dxa", `DXA Z-score ${hs.dxaZScore} entered (below -1 is a CAT2 primary indicator).`);
   if (hs.dxaZScore == null) missing.push("DXA / blood biomarkers not entered (optional; engine does not need them, but REDs review may).");
   safetyFlags.forEach((f) => f.ruleIds.forEach((r) => used.add(r)));
 
@@ -198,20 +199,22 @@ export function interpretRunner(a: RunnerAssessment, params: Params = defaultPar
   if (b.kneeValgus) obs.push("dynamic knee valgus");
   if (b.crossover) obs.push("crossover gait");
   if (b.verticalOscillation === "high") obs.push("high vertical oscillation");
-  if (b.cadenceSpm != null && b.cadenceSpm < 165) obs.push(`low cadence (${b.cadenceSpm} spm)`);
   if (b.peakKneeFlexionDeg != null && b.peakKneeFlexionDeg < 40) obs.push(`reduced midstance knee flexion (${b.peakKneeFlexionDeg} deg)`);
   if (obs.length) {
     findings.push({ id: "gait", domain: "Biomechanics (2D video)", severity: "attention", text: `Observed: ${obs.join(", ")}. These are observations; no validated injury cutoffs exist.`, ruleIds: ["running.gait.observation"] });
   } else if (b.overstride === false || b.cadenceSpm != null) {
     findings.push({ id: "gait", domain: "Biomechanics (2D video)", severity: "info", text: "No notable gait observations recorded.", ruleIds: ["running.gait.observation"] });
   } else missing.push("No video observations entered.");
+  if (b.cadenceSpm != null) {
+    findings.push({ id: "cadence", domain: "Biomechanics (2D video)", severity: "info", text: `Cadence ${b.cadenceSpm} steps/min recorded. No target is applied: about 180 is debated and comes from economy rather than injury studies.`, data: { cadenceSpm: b.cadenceSpm }, ruleIds: ["running.gait.observation"] });
+  }
 
   if (b.pelvicDrop === "marked" || b.kneeValgus || b.crossover) {
     addPri("hip_stability", 80, "Frontal-plane control observation (pelvic drop / knee valgus / crossover): unilateral hip and glute strength is the usual response.", ["running.gait.observation"]);
   }
   if (b.overstride) {
     if (symptomatic) {
-      addPri("gait_mechanics", 85, "Overstriding observed in a symptomatic runner: consider a +5-10% cadence trial with a metronome alongside strength work.", ["running.gait.cadence", "running.gait.observation"]);
+      addPri("gait_mechanics", 85, "Overstriding observed in a symptomatic runner: consider a cadence trial (about +10%, with a metronome) alongside strength work.", ["running.gait.cadence", "running.gait.observation"]);
       used.add("running.gait.cadence");
     } else {
       findings.push({ id: "gait-noop", domain: "Biomechanics (2D video)", severity: "info", text: "Overstriding observed but the runner is asymptomatic: no form change suggested (software default).", ruleIds: ["running.gait.observation"] });

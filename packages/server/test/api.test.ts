@@ -221,7 +221,7 @@ describe("full vertical slice (Alex)", () => {
     expect(rm.objectives.length).toBeGreaterThan(0);
     expect(rm.milestones.length).toBeGreaterThanOrEqual(3);
     expect(rm.adherence.completed).toBe(1);
-    expect(rm.baselineMetrics.squat1RM).toBeCloseTo(116.7, 1);
+    expect(rm.baselineMetrics.squat1RM).toBeCloseTo(109.1, 1);
   });
 });
 

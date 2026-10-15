@@ -6,8 +6,8 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { and, asc, desc, eq } from "drizzle-orm";
 import { ZodError } from "zod";
 import {
-  allRules, checkWeeklyVolume, compareInterpretations, epley1RM, getModule, listModules, objectiveProgress, paramsFor, progressionConfigFrom,
-  proposeNextTargets, weeklyCapPct, type RuleOverrides,
+  allRules, checkWeeklyVolume, compareInterpretations, getModule, listModules, objectiveProgress, paramsFor, progressionConfigFrom,
+  proposeNextTargets, running, weeklyCapPct, type RuleOverrides,
   type EngineReport, type PtInterpretation, type Program, type PrescribedExercise, type SessionLog,
 } from "@tpc/engine";
 import { schema, type Db } from "./db";
@@ -91,7 +91,7 @@ export function createApp(db: Db) {
     let logSquat: number | null = null;
     for (const l of logs) for (const e of (l.data as SessionLog).exercises) {
       if (e.exerciseId !== "back_squat") continue;
-      for (const s of e.sets) if (s.loadKg && s.reps > 0 && s.reps <= 10) logSquat = Math.max(logSquat ?? 0, epley1RM(s.loadKg, s.reps));
+      for (const s of e.sets) if (s.loadKg && s.reps > 0 && s.reps <= 10) logSquat = Math.max(logSquat ?? 0, running.estimate1RM(s.loadKg, s.reps));
     }
     let squatSource = "assessment";
     if (logSquat != null && (typeof curMetrics.squat1RM !== "number" || logSquat > curMetrics.squat1RM)) {

@@ -92,6 +92,9 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
   const params: Params = opts.params ?? defaultParams;
   const limits = tierLimits(params)[tier];
   const side = weakerSide(a, params.get("running.symmetry", "calfPct"));
+  const squatRel = metrics.squatRel as number | null;
+  const plyoRatio = params.get("running.plyo.prerequisites", "squatRatio");
+  const reactiveAllowed = !limits.lowLevelPlyoOnly && squatRel != null && squatRel >= plyoRatio;
   const unloadCut = params.get("core.periodization.3to1", "unloadVolumeCut");
   const taperCut = params.get("running.taper.window", "taperSetCut");
   const raceCut = params.get("running.taper.window", "raceWeekSetCut");
@@ -103,10 +106,15 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
     "Submaximal-load (15-25 rep) and isometric training are not used: the meta-analysis found no economy benefit.",
   ];
   if (squat1RM == null) assumptions.push("No squat test entered: all loads are blank. Establish a 5RM in week 1 under supervision and edit the loads.");
+  if (!limits.lowLevelPlyoOnly && !reactiveAllowed) {
+    assumptions.push(squatRel == null
+      ? `Reactive plyometrics (drop jumps, hurdle hops, bounding) are held back: no squat test, so the strength base (about ${plyoRatio}x body mass, NSCA) cannot be confirmed. Only low-level drills are used.`
+      : `Reactive plyometrics (drop jumps, hurdle hops, bounding) are held back until the squat reaches about ${plyoRatio}x body mass (currently ${squatRel}x; NSCA recommendation). Only low-level drills are used.`);
+  }
   if (side) assumptions.push(`The ${side} side is weaker on the single-leg calf raise: it gets one extra set on single-side exercises.`);
   const rulesUsed = new Set<string>([
     ...report.rulesUsed, "running.program.structure", "running.program.starting-loads", "core.periodization.3to1",
-    "running.strength.training-age", "running.plyo.contacts", "running.concurrent.scheduling",
+    "running.strength.training-age", "running.plyo.contacts", "running.plyo.prerequisites", "running.concurrent.scheduling",
   ]);
   if (tier === "novice") rulesUsed.add("core.periodization.2to1");
 
@@ -159,7 +167,7 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
     const sets = cut < 1 ? Math.max(2, Math.round(baseSets * cut)) : baseSets;
     const secSets = taper || w.unload ? 2 : 3;
     const rir = taper ? 3 : w.rir;
-    const contrast = w.build && !limits.lowLevelPlyoOnly && !isRaceWeek;
+    const contrast = w.build && reactiveAllowed && !isRaceWeek;
     const plyoScale = (w.unload || taper ? 0.6 : 1) * (w.build ? 1.15 : 1);
 
     const make = (origId: string, d: number, o: { sets: number; reps: number; pct?: number; pair?: string; note?: string; rirOverride?: number | null; sided?: boolean }): PrescribedExercise | null => {
@@ -223,14 +231,14 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
     enforceContactCap(B, limits.contactCap);
 
     const sessions: ProgramSession[] = [
-      { id: `w${w.week}-d1`, week: w.week, day: 1, name: "Session A", warmup: WARMUP, focus: isRaceWeek ? "Race week: light maintenance only, at least 4-5 days before the race" : contrast ? "Squat + drop-jump contrast, unilateral, soleus" : "Heavy squat, unilateral, soleus", exercises: A },
+      { id: `w${w.week}-d1`, week: w.week, day: 1, name: "Session A", warmup: WARMUP, focus: isRaceWeek ? "Race week: one light session early in the week (the books' marathon example is about 6 days before)" : contrast ? "Squat + drop-jump contrast, unilateral, soleus" : "Heavy squat, unilateral, soleus", exercises: A },
     ];
     if (!isRaceWeek) sessions.push({ id: `w${w.week}-d2`, week: w.week, day: 2, name: "Session B", warmup: WARMUP, focus: contrast ? "Deadlift + hurdle-hop contrast, posterior chain" : "Heavy hinge, posterior chain, robustness", exercises: B });
 
     const phase = isRaceWeek ? "Taper" : isTaperWeek ? "Taper" : w.phase;
     const label = isRaceWeek ? "Race week" : isTaperWeek ? "Taper" : w.label;
     const note = isRaceWeek
-      ? "Race week: one light session (about half the sets, same intensity), no plyometrics, no eccentric hamstring work. Default: finish gym work at least 4-5 days before the race (needs verification). Keep running frequency."
+      ? "Race week: one light session (about half the sets, same intensity), no plyometrics, no eccentric hamstring work. Do it early in the week (the books' marathon example is about 6 days before the race); timing for shorter events is a clinician decision. Keep running frequency."
       : isTaperWeek
         ? "Taper: sets cut about 40%, intensity kept, plyometric contacts reduced. Keep running frequency; cut running volume and intensity per the running plan."
         : w.unload ? `Unload: sets cut about 45%, intensity maintained.${w.label.includes("reassess") || w.label.includes("retest") ? " Reassess this week." : ""}`
