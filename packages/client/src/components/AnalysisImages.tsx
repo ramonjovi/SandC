@@ -58,6 +58,7 @@ export function AnalysisImages({ assessment, data }: { assessment: any; data: an
                   <Button size="sm" variant="outline" className="ml-auto" onClick={() => { target.current = p.id; input.current?.click(); }}><Camera className="h-3.5 w-3.5" /> Add picture</Button>
                 </div>
                 <p className="text-xs text-muted-foreground"><b>Capture:</b> {p.capture} <b>Look for:</b> {p.lookFor}</p>
+                {p.id === "vertical-oscillation" && <OscillationCalc />}
                 {mine.map((im) => <ImageRow key={im.id} im={im} phase={p} data={data} onChanged={reload} />)}
               </div>
             );
@@ -92,6 +93,33 @@ function ImageRow({ im, phase, data, onChanged }: { im: any; phase: (typeof PHAS
         <Button size="sm" disabled={saved} onClick={save}>{saved ? "Saved" : "Save changes"}</Button>
         <Button size="sm" variant="outline" onClick={() => mark(setDiscussion)(phase.discussion(data))}>Use suggested text from the form</Button>
         <Button size="sm" variant="ghost" onClick={remove}><Trash2 className="h-3.5 w-3.5" /> Delete</Button>
+      </div>
+    </div>
+  );
+}
+
+/** Vertical oscillation = how much the pelvis marker rises and falls: height at the highest point of flight minus height at the lowest point of stance. */
+function OscillationCalc() {
+  const [hi, setHi] = useState("");
+  const [lo, setLo] = useState("");
+  const a = Number(hi), b = Number(lo);
+  const ok = hi !== "" && lo !== "" && Number.isFinite(a) && Number.isFinite(b);
+  const diff = ok ? Math.round(Math.abs(a - b) * 10) / 10 : null;
+  const text = diff != null ? `Vertical oscillation ${diff} cm (pelvis ${a} cm at highest flight, ${b} cm at lowest stance)` : "";
+  return (
+    <div className="space-y-2 rounded-md border border-dashed bg-muted/30 p-2 text-xs">
+      <p>
+        <b>Measuring the bounce:</b> add one picture at the <b>highest point of flight</b> and one at the <b>lowest point of stance</b>, from the same camera position.
+        In the picture editor, level the picture and set the scale, then use <b>Vertical gap</b> from a fixed horizontal reference (for example the top of the treadmill belt) up to the pelvis or hip marker.
+        Type the two heights here. There is no accepted normal value, so compare with the athlete's own retest.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div><Label>Height at highest point of flight (cm)</Label><Input type="number" step="0.1" value={hi} onChange={(e) => setHi(e.target.value)} /></div>
+        <div><Label>Height at lowest point of stance (cm)</Label><Input type="number" step="0.1" value={lo} onChange={(e) => setLo(e.target.value)} /></div>
+        <div className="flex items-end gap-2">
+          <span className="pb-2 text-sm">{diff != null ? <b>{diff} cm bounce</b> : "Enter both heights"}</span>
+          {diff != null && <Button size="sm" variant="outline" onClick={() => navigator.clipboard?.writeText(text)}>Copy for Measurement box</Button>}
+        </div>
       </div>
     </div>
   );
