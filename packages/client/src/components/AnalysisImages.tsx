@@ -98,26 +98,39 @@ function ImageRow({ im, phase, data, onChanged }: { im: any; phase: (typeof PHAS
   );
 }
 
-/** Vertical oscillation = how much the pelvis marker rises and falls: height at the highest point of flight minus height at the lowest point of stance. */
+/**
+ * Vertical oscillation = how much the pelvis marker rises and falls: height at the highest point of flight minus height at the lowest point of stance.
+ * In cm when the picture has a scale; in pixels it is given as a share of the higher height (no scale needed, valid only with the same camera position at retest).
+ */
 function OscillationCalc() {
+  const [unit, setUnit] = useState<"cm" | "px">("cm");
   const [hi, setHi] = useState("");
   const [lo, setLo] = useState("");
   const a = Number(hi), b = Number(lo);
-  const ok = hi !== "" && lo !== "" && Number.isFinite(a) && Number.isFinite(b);
+  const ok = hi !== "" && lo !== "" && Number.isFinite(a) && Number.isFinite(b) && a > 0 && b > 0;
   const diff = ok ? Math.round(Math.abs(a - b) * 10) / 10 : null;
-  const text = diff != null ? `Vertical oscillation ${diff} cm (pelvis ${a} cm at highest flight, ${b} cm at lowest stance)` : "";
+  const pct = ok ? Math.round((Math.abs(a - b) / Math.max(a, b)) * 1000) / 10 : null;
+  const result = diff == null ? "" : unit === "cm" ? `${diff} cm` : `about ${pct}% of hip height`;
+  const text = diff == null ? "" : unit === "cm"
+    ? `Vertical oscillation ${diff} cm (pelvis ${a} cm at highest flight, ${b} cm at lowest stance)`
+    : `Vertical oscillation about ${pct}% of hip height (${diff} px of ${Math.max(a, b)} px; same camera position needed at retest)`;
   return (
     <div className="space-y-2 rounded-md border border-dashed bg-muted/30 p-2 text-xs">
       <p>
         <b>Measuring the bounce:</b> add one picture at the <b>highest point of flight</b> and one at the <b>lowest point of stance</b>, from the same camera position.
-        In the picture editor, level the picture and set the scale, then use <b>Vertical gap</b> from a fixed horizontal reference (for example the top of the treadmill belt) up to the pelvis or hip marker.
-        Type the two heights here. There is no accepted normal value, so compare with the athlete's own retest.
+        In the picture editor, use <b>Vertical gap</b> from a fixed horizontal reference (for example the top of the treadmill belt) up to the pelvis or hip marker.
+        With a scale set, the editor reads in cm. Without one it reads in pixels: choose pixels below and the bounce is shown as a percentage of hip height.
+        There is no accepted normal value, so compare with the athlete's own retest.
       </p>
+      <div className="flex gap-3">
+        <label className="flex items-center gap-1"><input type="radio" checked={unit === "cm"} onChange={() => setUnit("cm")} /> Heights in cm</label>
+        <label className="flex items-center gap-1"><input type="radio" checked={unit === "px"} onChange={() => setUnit("px")} /> Heights in pixels (no scale)</label>
+      </div>
       <div className="grid gap-2 sm:grid-cols-3">
-        <div><Label>Height at highest point of flight (cm)</Label><Input type="number" step="0.1" value={hi} onChange={(e) => setHi(e.target.value)} /></div>
-        <div><Label>Height at lowest point of stance (cm)</Label><Input type="number" step="0.1" value={lo} onChange={(e) => setLo(e.target.value)} /></div>
+        <div><Label>Height at highest point of flight ({unit})</Label><Input type="number" step="0.1" value={hi} onChange={(e) => setHi(e.target.value)} /></div>
+        <div><Label>Height at lowest point of stance ({unit})</Label><Input type="number" step="0.1" value={lo} onChange={(e) => setLo(e.target.value)} /></div>
         <div className="flex items-end gap-2">
-          <span className="pb-2 text-sm">{diff != null ? <b>{diff} cm bounce</b> : "Enter both heights"}</span>
+          <span className="pb-2 text-sm">{diff != null ? <b>{result} bounce</b> : "Enter both heights"}</span>
           {diff != null && <Button size="sm" variant="outline" onClick={() => navigator.clipboard?.writeText(text)}>Copy for Measurement box</Button>}
         </div>
       </div>

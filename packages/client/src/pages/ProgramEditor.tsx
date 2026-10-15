@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { running, STRATEGY_LABEL, type EngineReport, type PrescribedExercise, type Program } from "@tpc/engine";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Select, Textarea } from "@/components/ui";
 import { OverrideNotice, RuleBadges } from "@/components/RuleBadge";
@@ -48,6 +48,41 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
   const upd = (fn: (p: Program) => void) => { const p = structuredClone(program); fn(p); setProgram(p); setDirty(true); };
   const editEx = (si: number, ei: number, patch: Partial<PrescribedExercise>) => upd((p) => { Object.assign(p.weeks[week - 1].sessions[si].exercises[ei], patch); });
   const num = (v: string) => (v === "" ? null : Number(v));
+
+  /** Swap an exercise with its neighbour in this session and week. */
+  function move(si: number, ei: number, dir: -1 | 1) {
+    upd((p) => {
+      const list = p.weeks[week - 1].sessions[si].exercises;
+      const j = ei + dir;
+      if (j < 0 || j >= list.length) return;
+      [list[ei], list[j]] = [list[j], list[ei]];
+    });
+  }
+
+  /** Copy this session's exercise order to the same session in every other week (exercises a week does not have are left in place after the matched ones). */
+  function orderAllWeeks(si: number) {
+    upd((p) => {
+      const order = p.weeks[week - 1].sessions[si].exercises.map((e) => e.exerciseId);
+      for (const w of p.weeks) {
+        if (w.week === week) continue;
+        const sess = w.sessions[si];
+        if (!sess) continue;
+        const rank = (id: string) => { const i = order.indexOf(id); return i === -1 ? Number.MAX_SAFE_INTEGER : i; };
+        const idx = sess.exercises.map((e, i) => ({ e, i }));
+        idx.sort((a, b) => rank(a.e.exerciseId) - rank(b.e.exerciseId) || a.i - b.i);
+        sess.exercises = idx.map((x) => x.e);
+      }
+    });
+    setMsg({ tone: "ok", text: "This session's order was copied to the other weeks. Save the edits to keep it." });
+  }
+
+  /** Plan the later weeks of this session from the week being edited (reps, load steps, unload weeks). */
+  function planProgression(si: number) {
+    if (!program) return;
+    setProgram(running.planSessionProgression(program, week, si));
+    setDirty(true);
+    setMsg({ tone: "ok", text: `Weeks after week ${week} were planned from this session (reps rise through each block, a load or harder-variation step after each unload week, sets cut in unload weeks). Review them, then save.` });
+  }
 
   function addExercise(si: number, exId: string) {
     const def = running.EXERCISES[exId];
@@ -103,7 +138,11 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
                     <div className="font-medium text-sm">{e.name} {e.pairedWith && <Badge variant="outline">contrast pair</Badge>} {e.extraSetSide && <Badge variant="warn">+1 set {e.extraSetSide}</Badge>}</div>
                     <div className="text-xs text-muted-foreground">{e.cue}</div>
                   </div>
-                  <Button variant="ghost" size="icon" aria-label="Remove exercise" onClick={() => upd((p) => p.weeks[week - 1].sessions[si].exercises.splice(ei, 1))}><Trash2 className="h-4 w-4" /></Button>
+                  <div className="flex shrink-0 items-center">
+                    <Button variant="ghost" size="icon" aria-label="Move exercise up" disabled={ei === 0} onClick={() => move(si, ei, -1)}><ArrowUp className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" aria-label="Move exercise down" disabled={ei === s.exercises.length - 1} onClick={() => move(si, ei, 1)}><ArrowDown className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" aria-label="Remove exercise" onClick={() => upd((p) => p.weeks[week - 1].sessions[si].exercises.splice(ei, 1))}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
                   <div><Label>Sets</Label><Input type="number" value={e.sets} onChange={(ev) => editEx(si, ei, { sets: Number(ev.target.value) })} /></div>
@@ -119,7 +158,9 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
                 <RuleBadges ids={e.ruleIds} />
               </div>
             ))}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => planProgression(si)}>Plan progression for later weeks</Button>
+              <Button size="sm" variant="outline" onClick={() => orderAllWeeks(si)}>Use this order in all weeks</Button>
               <Plus className="h-4 w-4 text-muted-foreground" />
               <Select className="max-w-xs" value="" onChange={(ev) => ev.target.value && addExercise(si, ev.target.value)}>
                 <option value="">Add exercise...</option>

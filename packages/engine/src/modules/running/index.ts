@@ -28,5 +28,6 @@ export * from "./program";
 export * from "./exercises";
 export * from "./protocols";
 export * from "./exerciseGuides";
+export * from "./progress";
 export * from "./analysis";
 export { RUNNING_RULES } from "./rules";
