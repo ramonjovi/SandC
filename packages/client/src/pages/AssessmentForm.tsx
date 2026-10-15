@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Select, Textarea } from "@/components/ui";
+import { HowTo } from "@/components/HowTo";
 import { api } from "@/lib/api";
 import { formatTime, parseTime } from "@/lib/utils";
 
 type Kind = "num" | "text" | "area" | "bool" | "tri" | "select" | "time" | "date";
-interface FieldDef { path: string; label: string; kind: Kind; options?: Array<[string, string]>; unit?: string; wide?: boolean }
+interface FieldDef { path: string; label: string; kind: Kind; options?: Array<[string, string]>; unit?: string; wide?: boolean; /** protocol id: shows a how-to panel above this field */ howto?: string }
 
 const SECTIONS: Array<{ title: string; hint?: string; collapsed?: boolean; fields: FieldDef[] }> = [
   { title: "Profile", fields: [
@@ -25,7 +26,7 @@ const SECTIONS: Array<{ title: string; hint?: string; collapsed?: boolean; field
     { path: "history.weeklyKm", label: "Weekly volume (last 6 wk)", kind: "num", unit: "km" },
     { path: "history.longestRunKm", label: "Longest run", kind: "num", unit: "km" },
     { path: "history.longestRunMin", label: "Longest run", kind: "num", unit: "min" },
-    { path: "history.recentRace.distanceM", label: "Recent race distance", kind: "num", unit: "m" },
+    { howto: "time-trial", path: "history.recentRace.distanceM", label: "Recent race distance", kind: "num", unit: "m" },
     { path: "history.recentRace.timeSec", label: "Recent race time", kind: "time" },
     { path: "history.recentRace.daysAgo", label: "Days since race", kind: "num" },
     { path: "history.breakDays", label: "Days off running", kind: "num" },
@@ -46,7 +47,7 @@ const SECTIONS: Array<{ title: string; hint?: string; collapsed?: boolean; field
     { path: "health.notes", label: "Notes", kind: "area", wide: true },
   ] },
   { title: "Running video observations (2D)", hint: "Observations only: no validated injury cutoffs exist. Treadmill at the symptomatic speed (or long-run pace), 6-10 min settling, side and rear views: see Test protocols.", fields: [
-    { path: "biomechanics.footStrike", label: "Foot strike", kind: "select", options: [["", "—"], ["rearfoot", "Rearfoot"], ["midfoot", "Midfoot"], ["forefoot", "Forefoot"]] },
+    { howto: "gait-treadmill", path: "biomechanics.footStrike", label: "Foot strike", kind: "select", options: [["", "—"], ["rearfoot", "Rearfoot"], ["midfoot", "Midfoot"], ["forefoot", "Forefoot"]] },
     { path: "biomechanics.cadenceSpm", label: "Cadence", kind: "num", unit: "spm" },
     { path: "biomechanics.overstride", label: "Overstride (malleolus ahead of pelvis)", kind: "tri" },
     { path: "biomechanics.peakKneeFlexionDeg", label: "Peak knee flexion (midstance)", kind: "num", unit: "deg" },
@@ -59,20 +60,20 @@ const SECTIONS: Array<{ title: string; hint?: string; collapsed?: boolean; field
     { path: "biomechanics.notes", label: "Notes", kind: "area", wide: true },
   ] },
   { title: "Physical testing (treadmill, barbell, rack, phone)", hint: "How to run each test: see Test protocols. Keep every test identical at retest. Power tests are tracked for change, not judged against norms.", fields: [
-    { path: "physical.squatLoadKg", label: "Squat 3-5RM load", kind: "num", unit: "kg" },
+    { howto: "squat-rm", path: "physical.squatLoadKg", label: "Squat 3-5RM load", kind: "num", unit: "kg" },
     { path: "physical.squatReps", label: "Squat test reps (5 or fewer)", kind: "num" },
-    { path: "physical.cmjHeightCm", label: "CMJ height (avg of 3, from video)", kind: "num", unit: "cm" },
-    { path: "physical.broadJumpM", label: "Standing broad jump (best of 3)", kind: "num", unit: "m" },
-    { path: "physical.rsiFlightMs", label: "Pogo hops: average flight time", kind: "num", unit: "ms" },
+    { howto: "cmj-video", path: "physical.cmjHeightCm", label: "CMJ height (avg of 3, from video)", kind: "num", unit: "cm" },
+    { howto: "broad-jump", path: "physical.broadJumpM", label: "Standing broad jump (best of 3)", kind: "num", unit: "m" },
+    { howto: "rsi-pogo", path: "physical.rsiFlightMs", label: "Pogo hops: average flight time", kind: "num", unit: "ms" },
     { path: "physical.rsiContactMs", label: "Pogo hops: average contact time", kind: "num", unit: "ms" },
-    { path: "physical.calfRaiseLeftReps", label: "Single-leg calf raise, left", kind: "num", unit: "reps" },
+    { howto: "calf-raise", path: "physical.calfRaiseLeftReps", label: "Single-leg calf raise, left", kind: "num", unit: "reps" },
     { path: "physical.calfRaiseRightReps", label: "Single-leg calf raise, right", kind: "num", unit: "reps" },
-    { path: "physical.sebtAsymmetryCm", label: "SEBT / Y-balance largest L-R difference", kind: "num", unit: "cm" },
-    { path: "physical.nordicBreakAngleDeg", label: "Nordic break angle (from video)", kind: "num", unit: "deg from floor" },
+    { howto: "sebt", path: "physical.sebtAsymmetryCm", label: "SEBT / Y-balance largest L-R difference", kind: "num", unit: "cm" },
+    { howto: "nordic-video", path: "physical.nordicBreakAngleDeg", label: "Nordic break angle (from video)", kind: "num", unit: "deg from floor" },
     { path: "physical.notes", label: "Notes", kind: "area", wide: true },
   ] },
   { title: "Optional: force plate tests", collapsed: true, hint: "Leave blank if no force plate. Needed only for the Dynamic Strength Index.", fields: [
-    { path: "physical.imtpPeakForceN", label: "IMTP peak force", kind: "num", unit: "N" },
+    { howto: "force-plate-optional", path: "physical.imtpPeakForceN", label: "IMTP peak force", kind: "num", unit: "N" },
     { path: "physical.cmjPeakForceN", label: "CMJ peak force", kind: "num", unit: "N" },
     { path: "physical.nordicForceN", label: "Nordic eccentric force", kind: "num", unit: "N" },
   ] },
@@ -143,10 +144,13 @@ export function AssessmentForm({ assessment, onSaved, onInterpreted }: { assessm
             <CardHeader><CardTitle>{s.title}</CardTitle>{s.hint && <p className="text-xs text-muted-foreground">{s.hint}</p>}</CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {s.fields.map((f) => (
-                <div key={f.path} className={f.wide ? "sm:col-span-2 lg:col-span-3" : ""}>
-                  <Label>{f.label}{f.unit ? ` (${f.unit})` : ""}</Label>
-                  {control(f)}
-                </div>
+                <Fragment key={f.path}>
+                  {f.howto && <HowTo id={f.howto} />}
+                  <div className={f.wide ? "sm:col-span-2 lg:col-span-3" : ""}>
+                    <Label>{f.label}{f.unit ? ` (${f.unit})` : ""}</Label>
+                    {control(f)}
+                  </div>
+                </Fragment>
               ))}
               {s.title.startsWith("Physical testing") && <Calculators data={data} />}
             </CardContent>
