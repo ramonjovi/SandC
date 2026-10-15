@@ -1,5 +1,7 @@
 # Privacy notice and consent form (template)
 
+> **The app now has its own consent form** (top bar, **Consent form**): the same sections, with a [[blank]] for each clinic-specific detail, a line that says where the data is kept (filled in automatically: the clinic computer or Railway), tick-boxes, a typed signature, and a rule that a **second clinician must approve each version**. This printed template is the paper fallback.
+
 > **Before using this with real patients:** this is a plain-language template, not legal advice. Fill in the [bracketed] parts and have it checked against the privacy and health-records law that applies where TPC operates (for example the Data Privacy Act in the Philippines, GDPR in the EU, HIPAA in the US). Print it, give the athlete a copy, and keep the signed copy in your records.
 
 ---

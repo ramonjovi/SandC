@@ -4,11 +4,12 @@
 - [ ] Double-click `start.bat`. It takes a backup, starts the app and opens http://localhost:3001. Keep that black window open while you work.
 - [ ] Sign in with **your own** account (not the demo logins). If you forget your password, close the app and run `npm run make-admin` again with the same email.
 - [ ] Laptop screen lock on, disk encryption on (Windows: Settings > Privacy & security > Device encryption or BitLocker). Close other people's access to this computer.
-- [ ] Printed: consent form (`docs/consent-and-privacy.md`), test-day guide (`docs/test-protocols.md`).
+- [ ] **Consent form ready (do once, before the first patient):** open **Consent form** in the top bar, fill in every yellow [[blank]] (clinic name, contact, how long records are kept, what happens to videos...), save, then ask a **second clinician** to sign in with their own account and approve it. You cannot approve a form you wrote or last edited. Until that is done, use the paper form below.
+- [ ] Printed: the paper consent form (`docs/consent-and-privacy.md`) as a fallback, and the test-day guide (`docs/test-protocols.md`).
 - [ ] Equipment: barbell and rack, treadmill, phone on tripod, tape measure, floor tape, stopwatch.
 
 ## In the room
-1. **Consent first.** Give the notice, answer questions, get the signature. Then tick the consent box in the app. (Nothing else is recorded until this is done.)
+1. **Consent first.** Open the athlete's case and use the **Consent** card: **Read and sign here** (they read the approved form on screen, tick, and type their full name; under 18 a parent or guardian signs) or, if you used paper, **Signed paper form is on file**. A program cannot be approved, and the athlete cannot see their own account data, until consent is recorded. If they later withdraw, press Withdraw on the same card.
 2. **New runner** on the home screen: name, sex, age, body mass, event, goal time, race date, their goals in their words.
 3. Open the case and follow the **Guide: what to do next** box at the top. It tells you the next step and where to click.
 4. **Screening questions in private.** Record any pain site honestly. A flag does not block you; it means *you* decide, and a flagged athlete needs your recorded review note before the program can be approved.

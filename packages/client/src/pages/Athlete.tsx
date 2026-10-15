@@ -9,6 +9,7 @@ import { LogForm, unitLabel } from "@/components/LogForm";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { ChangePassword } from "./Account";
+import { AthleteConsent } from "@/components/AthleteConsent";
 import { cn } from "@/lib/utils";
 
 type View = "work" | "roadmap" | "week" | "account";
@@ -39,10 +40,13 @@ export function AthleteApp() {
         <button className="text-sm text-muted-foreground cursor-pointer" onClick={async () => { await logout(); navigate("/login"); }}>Sign out</button>
       </header>
       <main className="space-y-4 px-4 py-4">
+        {me.consentRequired && <AthleteConsent name={me.name} status={me.consent?.status ?? "none"} onDone={load} />}
+        {!me.consentRequired && <>
         {view === "work" && <Workouts code={code} me={me} reload={load} />}
         {view === "roadmap" && <Roadmap roadmap={me.roadmap} />}
         {view === "week" && <WeeklyLog code={code} me={me} reload={load} />}
         {view === "account" && <ChangePassword />}
+        </>}
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl">

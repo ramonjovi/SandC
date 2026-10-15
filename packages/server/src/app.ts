@@ -12,6 +12,7 @@ import {
 } from "@tpc/engine";
 import { schema, type Db } from "./db";
 import { purgeAthlete } from "./lifecycle";
+import { consentSummary, registerConsent, requireActiveConsent } from "./consent";
 import {
   AuthError, attachUser, endSession, hashPassword, makeLimiter, newToken, passwordProblem, requireCsrfHeader, requireRole, sha256,
   startSession, verifyPassword,
@@ -339,7 +340,7 @@ export function createApp(db: Db) {
     const logs = await db.select().from(sessionLogs).where(eq(sessionLogs.athleteId, athleteId)).orderBy(desc(sessionLogs.createdAt));
     const weekly = await db.select().from(weeklyLogs).where(eq(weeklyLogs.athleteId, athleteId)).orderBy(desc(weeklyLogs.weekStart));
     const account = (await db.select().from(users).where(eq(users.athleteId, athleteId)))[0];
-    res.json({ account: account ? { email: account.email, lastLoginAt: account.lastLoginAt, disabled: account.disabled } : null, athlete, baselineId: baseline?.id ?? null, assessments: out, programs: progs, sessionLogs: logs, weeklyLogs: weekly });
+    res.json({ consent: await consentSummary(db, athleteId), account: account ? { email: account.email, lastLoginAt: account.lastLoginAt, disabled: account.disabled } : null, athlete, baselineId: baseline?.id ?? null, assessments: out, programs: progs, sessionLogs: logs, weeklyLogs: weekly });
   }));
 
   clinician.post("/athletes/:id/invite", h(async (req, res) => {
@@ -486,6 +487,7 @@ export function createApp(db: Db) {
     const p = await getProgram(param(req, "id"));
     if (p.status === "archived") throw new HttpError(409, "Archived programs cannot be approved.");
     const body = ApproveSchema.parse(req.body);
+    await requireActiveConsent(db, p.athleteId, HttpError, "Record the athlete's consent (Consent card on the case page) before approving the program.");
     const rep = await latestReport(p.assessmentId);
     const hasHighStakes = ((rep?.report as EngineReport | undefined)?.safetyFlags ?? []).some((f) => f.highStakes);
     if (hasHighStakes && !(body.clearanceNote && body.clearanceNote.trim().length >= 10)) {
@@ -590,6 +592,10 @@ export function createApp(db: Db) {
   };
   me.get("/", h(async (req, res) => {
     const a = await myAthlete(req);
+    const consent = await consentSummary(db, a.id);
+    if (consent.status !== "active") {
+      return res.json({ name: a.name, consentRequired: true, consent, program: null, sessionLogs: [], weeklyLogs: [], roadmap: null, exerciseGuides: {} });
+    }
     const prog = await approvedFor(a.id);
     const logs = prog ? await db.select().from(sessionLogs).where(eq(sessionLogs.programId, prog.id)).orderBy(desc(sessionLogs.createdAt)) : [];
     const weekly = await db.select().from(weeklyLogs).where(eq(weeklyLogs.athleteId, a.id)).orderBy(desc(weeklyLogs.weekStart));
@@ -606,14 +612,17 @@ export function createApp(db: Db) {
 
   me.post("/session-logs", h(async (req, res) => {
     const a = await myAthlete(req);
+    await requireActiveConsent(db, a.id, HttpError, "Consent is needed before you can log sessions.");
     res.status(201).json(await recordSession(a.id, req.body, "athlete", a.name, false));
   }));
 
   me.post("/weekly-logs", h(async (req, res) => {
     const a = await myAthlete(req);
+    await requireActiveConsent(db, a.id, HttpError, "Consent is needed before you can log your week.");
     res.status(201).json(await recordWeek(a.id, req.body, a.name, "athlete"));
   }));
 
+  registerConsent({ db, app, clinician, me, HttpError, h, param, actorOf, audit, getAthlete });
   app.use("/api/me", me);
   app.use("/api", clinician);
 

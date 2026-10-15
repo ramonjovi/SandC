@@ -128,3 +128,42 @@ export const ruleOverrides = pgTable("rule_overrides", {
   updatedBy: text("updated_by").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.ruleId, t.key] })]);
+
+/** Versioned consent / privacy form. A new version is a draft until a DIFFERENT clinician from its author(s) approves it. */
+export const consentTemplates = pgTable("consent_templates", {
+  id: text("id").primaryKey(),
+  version: integer("version").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  items: jsonb("items").notNull(), // [{ id, text, required }]
+  status: text("status").notNull(), // draft | approved | retired
+  createdById: text("created_by_id"), // null = created by the system (default template)
+  createdByName: text("created_by_name").notNull(),
+  lastEditedById: text("last_edited_by_id"),
+  lastEditedByName: text("last_edited_by_name").notNull(),
+  approvedById: text("approved_by_id"),
+  approvedByName: text("approved_by_name"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  reviewNote: text("review_note"),
+  createdAt: createdAt(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One signed (or paper-attested) consent. The snapshot keeps exactly what was shown and agreed, whatever happens to the template later. */
+export const consents = pgTable("consents", {
+  id: text("id").primaryKey(),
+  athleteId: text("athlete_id").notNull().references(() => athletes.id),
+  mode: text("mode").notNull(), // in-app | paper
+  templateId: text("template_id"),
+  templateVersion: integer("template_version"),
+  snapshot: jsonb("snapshot").notNull(),
+  signerName: text("signer_name").notNull(),
+  signerRole: text("signer_role").notNull(), // athlete | guardian
+  signedOn: text("signed_on").notNull(), // ISO date
+  signedVia: text("signed_via").notNull(), // clinic device | athlete account | paper form
+  recordedBy: text("recorded_by").notNull(),
+  status: text("status").notNull().default("active"), // active | withdrawn
+  withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+  withdrawnReason: text("withdrawn_reason"),
+  createdAt: createdAt(),
+});

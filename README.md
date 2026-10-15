@@ -56,6 +56,14 @@ Clinicians can change the numeric defaults of rules (DSI bands, plyometric conta
 - **Archive / delete:** *Archive this athlete* on the case page hides them and blocks their sign-in (reversible, "Show archived" on the athlete list). *Delete permanently* is only offered for archived athletes, needs the exact name typed, erases all their records, and wipes the content of their audit rows (it keeps that a deletion happened, who did it and when).
 - **Guide:** each case has a "what to do next" checklist (intake, test day, interpretation, program, approval, invite, first session, retest), every test has a "How to run" panel, every exercise has a "Coach this exercise" panel for the clinician and a "How to do it" panel for the athlete, and the Program tab has a short guide to running a gym session. `docs/test-protocols.md` is the printable test-day guide.
 
+## Consent
+
+- **Consent form (top bar):** the privacy notice and tick-boxes athletes agree to. Each version is drafted by one clinician and must be **reviewed and approved by a different clinician** (not the author or last editor, with a short note of what was checked, and no [[blanks]] left). Approved versions are never edited; a change is a new version, and the previous one is retired.
+- **Where the data is kept** is filled in automatically from where the app runs (the clinic computer, or Railway when `RAILWAY_ENVIRONMENT` is set), so a signed form never states a place that is not true.
+- **Signing:** on the case page's Consent card (athlete reads and types their name on the clinic device), in the athlete's own account, or as a recorded signed paper form. Under 18 requires a named parent or guardian. Each signature stores the exact wording, version and approval details.
+- **What it controls:** a program cannot be approved, and an athlete cannot see their own data or log sessions, without active consent. Withdrawing consent blocks both again. Permanent deletion also removes consent records.
+- The wording is a plain-language template, not legal advice: have it checked against the privacy and health-records law where TPC operates.
+
 ## Safety and honesty
 
 - Every rule is classified **source-verified / proposed default / needs verification**; see the in-app **Rules** page and `docs/rule-classification.md`.

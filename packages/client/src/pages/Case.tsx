@@ -12,6 +12,7 @@ import { Interpretation } from "./Interpretation";
 import { ProgramEditor } from "./ProgramEditor";
 import { CaseGuide } from "@/components/CaseGuide";
 import { AthleteLifecycle } from "@/components/AthleteLifecycle";
+import { ConsentPanel } from "@/components/ConsentPanel";
 
 type Tab = "assess" | "interpret" | "program" | "progress" | "audit";
 
@@ -65,9 +66,7 @@ export function CasePage() {
         </Alert>
       )}
 
-      {!data.athlete.archivedAt && !assessment.data.consent?.given && (
-        <Alert tone="warn"><b>Consent not recorded.</b> Give the athlete the privacy notice and consent form and record their agreement in the Assess tab before collecting health information.</Alert>
-      )}
+      {!data.athlete.archivedAt && data.consent && <ConsentPanel athleteId={data.athlete.id} athleteName={data.athlete.name} summary={data.consent} onChanged={reload} />}
       <AthleteLifecycle athlete={data.athlete} onChanged={reload} />
       <CaseGuide data={data} assessment={assessment} programRow={programRow} goTab={setTab} />
 
