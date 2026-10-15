@@ -36,7 +36,8 @@ export function ClinicianLayout() {
 }
 
 export function Home() {
-  const { data, reload } = useApi<any[]>("/athletes");
+  const [showArchived, setShowArchived] = useState(false);
+  const { data, reload } = useApi<any[]>(showArchived ? "/athletes?archived=1" : "/athletes");
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", sex: "male", age: "30", mass: "70", event: "10k", dist: "10000", time: "", date: "", narrative: "" });
@@ -62,7 +63,10 @@ export function Home() {
           <h1 className="text-xl font-semibold">Athletes</h1>
           <p className="text-sm text-muted-foreground">Running module. Demo data is synthetic.</p>
         </div>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer"><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived</label>
         <Button onClick={() => setOpen(!open)}>{open ? "Cancel" : "New runner"}</Button>
+        </div>
       </div>
 
       {open && (

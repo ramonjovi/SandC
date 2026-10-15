@@ -10,6 +10,8 @@ import { fmtDate, fmtDateTime } from "@/lib/utils";
 import { AssessmentForm } from "./AssessmentForm";
 import { Interpretation } from "./Interpretation";
 import { ProgramEditor } from "./ProgramEditor";
+import { CaseGuide } from "@/components/CaseGuide";
+import { AthleteLifecycle } from "@/components/AthleteLifecycle";
 
 type Tab = "assess" | "interpret" | "program" | "progress" | "audit";
 
@@ -62,6 +64,9 @@ export function CasePage() {
             <Button size="sm" variant="outline" onClick={() => navigator.clipboard?.writeText(invite)}><Copy className="h-3.5 w-3.5" /> Copy</Button></div>
         </Alert>
       )}
+
+      <AthleteLifecycle athlete={data.athlete} onChanged={reload} />
+      <CaseGuide data={data} assessment={assessment} programRow={programRow} goTab={setTab} />
 
       <Tabs<Tab> value={tab} onChange={setTab} tabs={[
         { id: "assess", label: "1 · Assess" }, { id: "interpret", label: "2 · Interpret" }, { id: "program", label: "3 · Program" },
@@ -153,7 +158,7 @@ function Progress({ id, data, reload }: { id: string; data: any; reload: () => v
             {logs.length === 0 && <p className="text-sm text-muted-foreground">No sessions logged yet.</p>}
             {logs.map((l) => (
               <div key={l.id} className="rounded-lg border p-3 text-sm">
-                <div className="flex items-center justify-between"><b>Week {l.week} · Session {l.day === 1 ? "A" : "B"}</b><span className="text-xs text-muted-foreground">{fmtDateTime(l.data.performedAt ?? l.createdAt)}{l.loggedBy !== "athlete" ? ` · by ${l.loggedBy}` : ""}</span></div>
+                <div className="flex items-center justify-between"><b>Week {l.week} · Session {String.fromCharCode(64 + l.day)}</b><span className="text-xs text-muted-foreground">{fmtDateTime(l.data.performedAt ?? l.createdAt)}{l.loggedBy !== "athlete" ? ` · by ${l.loggedBy}` : ""}</span></div>
                 {l.data.notes && <p className="text-muted-foreground">{l.data.notes}</p>}
                 <ul className="mt-1 space-y-1">
                   {l.proposals.filter((p: any) => p.action !== "hold" || l.data.exercises.some((e: any) => e.prescribedId === p.prescribedId)).map((p: any) => (

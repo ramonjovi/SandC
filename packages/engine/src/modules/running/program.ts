@@ -85,6 +85,7 @@ function parseDate(s: string | null | undefined): Date | null {
 }
 
 export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport, opts: RunnerProgramOpts = {}): Program {
+  const sessionsPerWeek: 1 | 2 | 3 = opts.sessionsPerWeek === 1 || opts.sessionsPerWeek === 3 ? opts.sessionsPerWeek : 2;
   const metrics = computeMetrics(a);
   const squat1RM = metrics.squat1RM as number | null;
   const emphasis = report.strategy.emphasis;
@@ -100,7 +101,12 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
   const raceCut = params.get("running.taper.window", "raceWeekSetCut");
   const assumptions: string[] = [
     `Strength-training tier: ${tier}${a.history.strengthTrainingYears == null ? " (experience not entered, treated conservatively)" : ""}. Sets are capped at ${limits.maxSets}; plyometric contacts at ${limits.contactCap} per session${limits.lowLevelPlyoOnly ? " (low-level plyometrics only)" : ""}.`,
-    "Two gym sessions per week (A: squat pattern, B: hinge/robustness). Leave at least 6 hours between a gym session and a hard run, avoid hard gym and hard run on the same day, and follow a heavy gym session with an easy, low-volume run only.",
+    sessionsPerWeek === 1
+      ? "One gym session per week (whole-body: squat, hinge, calves, hamstrings). The books use 1 resistance day per week in later phases of a runner's plan; with only one day, the heavy lifts are kept and accessory work is trimmed."
+      : sessionsPerWeek === 3
+        ? "Three gym sessions per week: A squat and single-leg strength, B hinge and posterior chain, C a light session for calves, hips and low-level reactive work with NO heavy lifts. The third session is a software addition (the books describe 1-2 resistance days for runners); drop it if running load or recovery suffers."
+        : "Two gym sessions per week (A: squat pattern, B: hinge and robustness), as in the books' runner examples.",
+    "Leave at least 6 hours between a gym session and a hard run, avoid hard gym and hard run on the same day, and follow a heavy gym session with an easy, low-volume run only.",
     "Loads for secondary lifts are starting estimates as a ratio of squat 1RM (needs verification): confirm each in week 1 and edit.",
     "Percentages, set/rep schemes and unload cuts are proposed software defaults derived from the knowledge base; the clinician may edit any prescription.",
     "Submaximal-load (15-25 rep) and isometric training are not used: the meta-analysis found no economy benefit.",
@@ -114,7 +120,7 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
   if (side) assumptions.push(`The ${side} side is weaker on the single-leg calf raise: it gets one extra set on single-side exercises.`);
   const rulesUsed = new Set<string>([
     ...report.rulesUsed, "running.program.structure", "running.program.starting-loads", "core.periodization.3to1",
-    "running.strength.training-age", "running.plyo.contacts", "running.plyo.prerequisites", "running.concurrent.scheduling",
+    "running.strength.training-age", "running.plyo.contacts", "running.plyo.prerequisites", "running.concurrent.scheduling", "running.program.frequency",
   ]);
   if (tier === "novice") rulesUsed.add("core.periodization.2to1");
 
@@ -197,43 +203,80 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
 
     const A: PrescribedExercise[] = [];
     const B: PrescribedExercise[] = [];
+    const C: PrescribedExercise[] = [];
+    // Race week is always one light session whatever the weekly choice.
+    const layout: 1 | 2 | 3 = isRaceWeek ? 2 : sessionsPerWeek;
+    const djReps = emphasis === "strength" ? 4 : emphasis === "power" ? 6 : 5;
+    const hhReps = emphasis === "strength" ? 5 : emphasis === "power" ? 8 : 6;
 
     const sq = make("back_squat", 1, { sets, reps: w.reps });
     push(A, sq);
-    if (contrast) {
-      const djReps = emphasis === "strength" ? 4 : emphasis === "power" ? 6 : 5;
-      push(A, make("drop_jump", 1, { sets, reps: djReps, pair: sq?.id, note: "Contrast pair: perform 2-3 min after the squat set, then rest 3 min before the next pair." }));
-    }
-    push(A, make("split_squat", 1, { sets: secSets, reps: 6, sided: true }));
-    push(A, make("seated_soleus_raise", 1, { sets: secSets, reps: 8 }));
-    if (!contrast && !isRaceWeek) {
-      push(A, make("side_plank", 1, { sets: 3, reps: 30, rirOverride: null }));
-      if (emphasis !== "strength" || w.build || limits.lowLevelPlyoOnly) push(A, make("skips_for_height", 1, { sets: 3, reps: plyoReps(3), rirOverride: null }));
-    }
-    if (isRaceWeek) push(A, make("side_plank", 1, { sets: 2, reps: 30, rirOverride: null }));
+    if (contrast) push(A, make("drop_jump", 1, { sets, reps: djReps, pair: sq?.id, note: "Contrast pair: perform 2-3 min after the squat set, then rest 3 min before the next pair." }));
 
-    if (!isRaceWeek) {
+    if (layout === 1) {
+      // One whole-body session: both heavy lifts, one fewer set on the hinge, trimmed accessories.
+      const hingeSets = Math.max(2, sets - 1);
+      const td = make("trap_bar_deadlift", 1, { sets: hingeSets, reps: w.reps });
+      push(A, td);
+      if (contrast) push(A, make("hurdle_hops", 1, { sets: hingeSets, reps: hhReps, pair: td?.id, note: "Contrast pair: reactive, minimal ground contact." }));
+      push(A, make("seated_soleus_raise", 1, { sets: secSets, reps: 8 }));
+      push(A, make("nordic_hamstring", 1, { sets: secSets, reps: 5, rirOverride: null }));
+      push(A, make("single_leg_calf_raise", 1, { sets: secSets, reps: 8, sided: true }));
+      if (!contrast) push(A, make("pogo_hops", 1, { sets: 3, reps: plyoReps(3), rirOverride: null }));
+      push(A, make("pallof_press", 1, { sets: 3, reps: 10, rirOverride: null }));
+      if (hipStab) push(A, make("lateral_band_walk", 1, { sets: 2, reps: 12, rirOverride: null }));
+    } else if (layout === 3) {
+      push(A, make("split_squat", 1, { sets: secSets, reps: 6, sided: true }));
+      push(A, make("side_plank", 1, { sets: 3, reps: 30, rirOverride: null }));
       const td = make("trap_bar_deadlift", 2, { sets, reps: w.reps });
       push(B, td);
-      if (contrast) {
-        const hhReps = emphasis === "strength" ? 5 : emphasis === "power" ? 8 : 6;
-        push(B, make("hurdle_hops", 2, { sets, reps: hhReps, pair: td?.id, note: "Contrast pair: reactive, minimal ground contact." }));
-        if (emphasis === "power") push(B, make("bounding", 2, { sets: 3, reps: w.unload || taper ? 5 : 8, rirOverride: null }));
-      }
+      if (contrast) push(B, make("hurdle_hops", 2, { sets, reps: hhReps, pair: td?.id, note: "Contrast pair: reactive, minimal ground contact." }));
+      if (contrast && emphasis === "power") push(B, make("bounding", 2, { sets: 3, reps: w.unload || taper ? 5 : 8, rirOverride: null }));
       push(B, make("nordic_hamstring", 2, { sets: secSets, reps: 5, rirOverride: null }));
-      push(B, make("single_leg_calf_raise", 2, { sets: secSets, reps: 8, sided: true }));
-      if (!contrast) push(B, make("pogo_hops", 2, { sets: 3, reps: plyoReps(3), rirOverride: null }));
       push(B, make("pallof_press", 2, { sets: 3, reps: 10, rirOverride: null }));
-      if (hipStab) push(B, make("lateral_band_walk", 2, { sets: 2, reps: 12, rirOverride: null }));
+      // Session C: no heavy lifts.
+      push(C, make("seated_soleus_raise", 3, { sets: secSets, reps: 8 }));
+      push(C, make("single_leg_calf_raise", 3, { sets: secSets, reps: 8, sided: true }));
+      push(C, make("lateral_band_walk", 3, { sets: 2, reps: 12, rirOverride: null }));
+      if (!contrast) { push(C, make("skips_for_height", 3, { sets: 3, reps: plyoReps(3), rirOverride: null })); push(C, make("pogo_hops", 3, { sets: 3, reps: plyoReps(3), rirOverride: null })); }
+    } else {
+      push(A, make("split_squat", 1, { sets: secSets, reps: 6, sided: true }));
+      push(A, make("seated_soleus_raise", 1, { sets: secSets, reps: 8 }));
+      if (!contrast && !isRaceWeek) {
+        push(A, make("side_plank", 1, { sets: 3, reps: 30, rirOverride: null }));
+        if (emphasis !== "strength" || w.build || limits.lowLevelPlyoOnly) push(A, make("skips_for_height", 1, { sets: 3, reps: plyoReps(3), rirOverride: null }));
+      }
+      if (isRaceWeek) push(A, make("side_plank", 1, { sets: 2, reps: 30, rirOverride: null }));
+
+      if (!isRaceWeek) {
+        const td = make("trap_bar_deadlift", 2, { sets, reps: w.reps });
+        push(B, td);
+        if (contrast) {
+          push(B, make("hurdle_hops", 2, { sets, reps: hhReps, pair: td?.id, note: "Contrast pair: reactive, minimal ground contact." }));
+          if (emphasis === "power") push(B, make("bounding", 2, { sets: 3, reps: w.unload || taper ? 5 : 8, rirOverride: null }));
+        }
+        push(B, make("nordic_hamstring", 2, { sets: secSets, reps: 5, rirOverride: null }));
+        push(B, make("single_leg_calf_raise", 2, { sets: secSets, reps: 8, sided: true }));
+        if (!contrast) push(B, make("pogo_hops", 2, { sets: 3, reps: plyoReps(3), rirOverride: null }));
+        push(B, make("pallof_press", 2, { sets: 3, reps: 10, rirOverride: null }));
+        if (hipStab) push(B, make("lateral_band_walk", 2, { sets: 2, reps: 12, rirOverride: null }));
+      }
     }
 
-    enforceContactCap(A, limits.contactCap);
-    enforceContactCap(B, limits.contactCap);
+    for (const list of [A, B, C]) enforceContactCap(list, limits.contactCap);
 
+    const raceFocus = "Race week: one light session early in the week (the books' marathon example is about 6 days before)";
     const sessions: ProgramSession[] = [
-      { id: `w${w.week}-d1`, week: w.week, day: 1, name: "Session A", warmup: WARMUP, focus: isRaceWeek ? "Race week: one light session early in the week (the books' marathon example is about 6 days before)" : contrast ? "Squat + drop-jump contrast, unilateral, soleus" : "Heavy squat, unilateral, soleus", exercises: A },
+      {
+        id: `w${w.week}-d1`, week: w.week, day: 1, name: "Session A", warmup: WARMUP, exercises: A,
+        focus: isRaceWeek ? raceFocus
+          : layout === 1 ? (contrast ? "Whole body: squat + hinge with reactive pairs, calves, hamstrings" : "Whole body: heavy squat and hinge, calves, hamstrings")
+          : layout === 3 ? (contrast ? "Squat + drop-jump contrast, single-leg strength" : "Heavy squat, single-leg strength")
+          : contrast ? "Squat + drop-jump contrast, unilateral, soleus" : "Heavy squat, unilateral, soleus",
+      },
     ];
-    if (!isRaceWeek) sessions.push({ id: `w${w.week}-d2`, week: w.week, day: 2, name: "Session B", warmup: WARMUP, focus: contrast ? "Deadlift + hurdle-hop contrast, posterior chain" : "Heavy hinge, posterior chain, robustness", exercises: B });
+    if (!isRaceWeek && layout >= 2) sessions.push({ id: `w${w.week}-d2`, week: w.week, day: 2, name: "Session B", warmup: WARMUP, exercises: B, focus: layout === 3 ? (contrast ? "Deadlift + hurdle-hop contrast, hamstrings" : "Heavy hinge, hamstrings") : contrast ? "Deadlift + hurdle-hop contrast, posterior chain" : "Heavy hinge, posterior chain, robustness" });
+    if (!isRaceWeek && layout === 3) sessions.push({ id: `w${w.week}-d3`, week: w.week, day: 3, name: "Session C", warmup: WARMUP, exercises: C, focus: "Light: calves, hips and low-level reactive work (no heavy lifts)" });
 
     const phase = isRaceWeek ? "Taper" : isTaperWeek ? "Taper" : w.phase;
     const label = isRaceWeek ? "Race week" : isTaperWeek ? "Taper" : w.label;
@@ -249,7 +292,7 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
   const { objectives, milestones } = buildObjectivesAndMilestones(a, report, metrics, duration, raceWeek, tier, params.get("running.gait.cadence", "cadenceIncreasePct"), { cmj: params.get("running.field-tests.tracking", "cmjPct"), rsi: params.get("running.field-tests.tracking", "rsiPct"), bj: params.get("running.field-tests.tracking", "broadJumpPct") });
   return {
     moduleId: "running", generatedAt: new Date().toISOString(), durationWeeks: duration,
-    strategy: report.strategy, weeks, objectives, milestones, assumptions, restrictionsApplied, trainingTier: tier, rulesUsed: [...rulesUsed], paramOverrides: params.overrides(),
+    strategy: report.strategy, weeks, objectives, milestones, assumptions, restrictionsApplied, trainingTier: tier, sessionsPerWeek, rulesUsed: [...rulesUsed], paramOverrides: params.overrides(),
   };
 }
 

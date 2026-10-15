@@ -44,6 +44,12 @@ Add a PostgreSQL service, then set `DATABASE_URL`, `ADMIN_EMAIL` and `ADMIN_PASS
 
 Clinicians can change the numeric defaults of rules (DSI bands, plyometric contact caps, progression percentages, pace fractions and so on) on the **Rules** page. Each value has a validated range (for source-backed rules, the range the source supports), every change requires a written reason, and every change and reset is recorded in the audit log and the **Change history** tab. Changes apply to new interpretations, newly generated programs and future athlete logging; programs already generated keep their values, and each report and program records which overrides were in effect. Engine tests check that every editable value is actually read by the engine.
 
+## Choosing sessions, archiving athletes, and the clinician guide
+
+- **Sessions per week:** when generating a program choose 1, 2 (default) or 3 gym sessions. One keeps both heavy lifts in a whole-body session; three adds a light third session (calves, hips, low-level reactive work, no heavy lifts). Race week is always one light session.
+- **Archive / delete:** *Archive this athlete* on the case page hides them and blocks their sign-in (reversible, "Show archived" on the athlete list). *Delete permanently* is only offered for archived athletes, needs the exact name typed, erases all their records, and wipes the content of their audit rows (it keeps that a deletion happened, who did it and when).
+- **Guide:** each case has a "what to do next" checklist (intake, test day, interpretation, program, approval, invite, first session, retest), every test has a "How to run" panel, every exercise has a "Coach this exercise" panel for the clinician and a "How to do it" panel for the athlete, and the Program tab has a short guide to running a gym session. `docs/test-protocols.md` is the printable test-day guide.
+
 ## Safety and honesty
 
 - Every rule is classified **source-verified / proposed default / needs verification**; see the in-app **Rules** page and `docs/rule-classification.md`.

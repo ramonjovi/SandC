@@ -4,6 +4,8 @@ import { running, STRATEGY_LABEL, type EngineReport, type PrescribedExercise, ty
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Select, Textarea } from "@/components/ui";
 import { OverrideNotice, RuleBadges } from "@/components/RuleBadge";
 import { api } from "@/lib/api";
+import { ExerciseHowTo } from "@/components/ExerciseHowTo";
+import { useMeta } from "@/lib/meta";
 import { cn, fmtDateTime } from "@/lib/utils";
 
 export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: { athleteId: string; assessment: any; programRow: any | null; onChanged: () => void }) {
@@ -12,6 +14,8 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
   const [week, setWeek] = useState(1);
   const [msg, setMsg] = useState<{ tone: "ok" | "danger" | "warn"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [perWeek, setPerWeek] = useState<number>(programRow?.data?.sessionsPerWeek ?? 2);
+  const guides = ((useMeta().modules[0] as any).exerciseGuides ?? {}) as Record<string, any>;
   useEffect(() => { setProgram(programRow?.data ?? null); setDirty(false); }, [programRow?.id, programRow?.version]);
 
   const report: EngineReport | null = assessment.report;
@@ -20,7 +24,7 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
 
   async function generate() {
     setBusy(true); setMsg(null);
-    try { await api(`/assessments/${assessment.id}/program`, { method: "POST" }); onChanged(); } catch (e) { setMsg({ tone: "danger", text: (e as Error).message }); } finally { setBusy(false); }
+    try { await api(`/assessments/${assessment.id}/program`, { method: "POST", body: { sessionsPerWeek: perWeek } }); onChanged(); } catch (e) { setMsg({ tone: "danger", text: (e as Error).message }); } finally { setBusy(false); }
   }
   async function save() {
     if (!program || !programRow) return;
@@ -33,6 +37,7 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
       <Card><CardContent className="space-y-3 pt-5">
         <p className="text-sm">Generate an editable eight-week gym-based S&C program from this assessment{report ? " and the engine's interpretation" : ""}.</p>
         {!report && <Alert tone="warn">The engine has not interpreted this assessment yet; the program will use a fresh interpretation.</Alert>}
+        <SessionsChoice value={perWeek} onChange={setPerWeek} />
         <Button onClick={generate} disabled={busy}>Generate eight-week program</Button>
         {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       </CardContent></Card>
@@ -108,6 +113,7 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
                   <div><Label>RIR</Label><Input type="number" value={e.rir ?? ""} onChange={(ev) => editEx(si, ei, { rir: num(ev.target.value) })} /></div>
                   <div><Label>Rest (s)</Label><Input type="number" step="15" value={e.restSec} onChange={(ev) => editEx(si, ei, { restSec: Number(ev.target.value) })} /></div>
                 </div>
+                <div className="mt-2"><ExerciseHowTo guide={guides[e.exerciseId]} audience="clinician" /></div>
                 <p className="mt-2 text-xs text-muted-foreground"><b>Progression:</b> {e.progressionRule}</p>
                 {e.notes && <p className="text-xs text-amber-800">{e.notes}</p>}
                 <RuleBadges ids={e.ruleIds} />
@@ -127,10 +133,13 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       <div className="sticky bottom-3 flex flex-wrap items-center gap-2 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur">
         <Button onClick={save} disabled={busy || !dirty}>{dirty ? "Save edits" : "Saved"}</Button>
+        <div className="flex items-center gap-2 text-xs"><span className="text-muted-foreground">Sessions per week</span>
+          <Select className="h-8 w-20" value={perWeek} onChange={(e) => setPerWeek(Number(e.target.value))}><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></Select></div>
         <Button variant="outline" onClick={generate} disabled={busy}>Regenerate from assessment</Button>
         {dirty && <span className="text-xs text-amber-800">Unsaved edits: save before approving.</span>}
       </div>
 
+      <RunningASession />
       <ApprovePanel programRow={programRow} flags={flags} highStakes={highStakes} dirty={dirty} onDone={onChanged} />
       <Objectives program={program} />
     </div>
@@ -176,5 +185,43 @@ function Objectives({ program }: { program: Program }) {
         <div className="border-t pt-2">{program.milestones.map((m) => <div key={m.id}><b>Week {m.week}:</b> {m.label}</div>)}</div>
       </CardContent>
     </Card>
+  );
+}
+
+function SessionsChoice({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const opts = [
+    { n: 1, t: "1 session", d: "One whole-body session: squat and deadlift together, calves, hamstrings. Best when time or recovery is tight, or late in a block." },
+    { n: 2, t: "2 sessions (recommended)", d: "Session A squat pattern, session B hinge and robustness. Matches the runner examples in the books." },
+    { n: 3, t: "3 sessions", d: "Adds a light third session for calves, hips and low-level reactive work (no heavy lifts). A software add-on: drop it if running load or recovery suffers." },
+  ];
+  return (
+    <div className="space-y-2">
+      <Label>Gym sessions per week</Label>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {opts.map((o) => (
+          <button key={o.n} type="button" onClick={() => onChange(o.n)}
+            className={cn("rounded-lg border p-3 text-left text-sm cursor-pointer", value === o.n ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card hover:bg-accent")}>
+            <div className="font-medium">{o.t}</div><div className="text-xs text-muted-foreground">{o.d}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RunningASession() {
+  return (
+    <details className="rounded-xl border bg-card p-4 text-sm">
+      <summary className="cursor-pointer font-medium">Guide: running a gym session with the athlete</summary>
+      <ol className="ml-5 mt-2 list-decimal space-y-1.5">
+        <li><b>Before:</b> ask about pain, sleep and the last run. If pain is 4/10 or more at a site, skip loads there and note it. Do the warm-up listed on the session (about 10-15 minutes).</li>
+        <li><b>Ramp-up:</b> do 2-3 progressively heavier sets of the first lift before the working sets.</li>
+        <li><b>Working sets:</b> use the prescribed load and reps and stop at the reps-in-reserve target (RIR 2 = could have done 2 more clean reps). Do not train to failure.</li>
+        <li><b>Rest:</b> strength and power work needs 2-5 minutes between sets (the book's range). Contrast pairs: plyometric set 2-3 minutes after the heavy set, then rest about 3 minutes.</li>
+        <li><b>Plyometrics:</b> stop the set when ground contact looks longer, landings get noisy, or height drops by about 10%.</li>
+        <li><b>Record:</b> actual reps and loads, final-set RIR, and pain 0-10 per exercise. The app proposes the next loads; you approve them with "Apply to next week".</li>
+        <li><b>Running around it:</b> keep at least 6 hours between the gym and a hard run, never hard gym and a hard run on the same day, and after heavy lifting keep the run easy and short.</li>
+      </ol>
+    </details>
   );
 }

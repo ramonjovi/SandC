@@ -293,6 +293,14 @@ export const RUNNING_RULES: Rule[] = [
     verification: "Read in the book text. Replaces the knowledge file's 'always run before lifting' rule, which the book does not state.",
   },
   {
+    id: "running.program.frequency",
+    title: "Gym sessions per week: 1 or 2 supported, 3 is an add-on",
+    status: "proposed_default",
+    source: "NSCA Developing Endurance 2nd ed., ch. 6 (sample runner blocks: 2 resistance days falling to 1 in later phases); knowledge file 01 Block 5.1",
+    statement: "The clinician chooses 1, 2 (default) or 3 sessions per week. Two sessions (squat day, hinge day) follows the books' runner examples; one session keeps both heavy lifts and trims accessories; the third session is light (calves, hips, low-level reactive work) with no heavy lifts.",
+    verification: "1-2 resistance days for runners is in the book examples; a third day is not described, so it is a software add-on kept light on purpose.",
+  },
+  {
     id: "running.taper.window",
     title: "Taper length and size",
     status: "source_verified",

@@ -161,6 +161,8 @@ export interface Program {
   restrictionsApplied: string[];
   /** Strength-training experience tier used to scale volume and plyometric exposure. */
   trainingTier?: string;
+  /** Gym sessions per week chosen when the program was generated (1-3). */
+  sessionsPerWeek?: number;
   rulesUsed: string[];
   /** Clinician overrides of rule defaults that were in effect when this program was generated. */
   paramOverrides?: Record<string, Record<string, number>>;
@@ -222,4 +224,15 @@ export interface TestProtocol {
   source: string | null;
   status: RuleStatus;
   note?: string;
+}
+
+/** Coaching notes for one exercise, shown to the clinician (and in plain form to the athlete). */
+export interface ExerciseGuide {
+  setup: string[];
+  steps: string[];
+  cues: string[];
+  errors: string[];
+  easier: string;
+  harder: string;
+  stopIf: string;
 }

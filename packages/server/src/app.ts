@@ -252,7 +252,7 @@ export function createApp(db: Db) {
   clinician.get("/meta", (_req, res) => {
     res.json({
       rules: allRules(),
-      modules: listModules().map((m) => ({ id: m.id, name: m.name, priorities: m.priorityKeys(), protocols: m.protocols ?? [] })),
+      modules: listModules().map((m) => ({ id: m.id, name: m.name, priorities: m.priorityKeys(), protocols: m.protocols ?? [], exerciseGuides: m.exerciseGuides ?? {} })),
     });
   });
 
@@ -301,8 +301,9 @@ export function createApp(db: Db) {
     res.json({ ok: true, changes });
   }));
 
-  clinician.get("/athletes", h(async (_req, res) => {
-    const rows = await db.select().from(athletes).orderBy(desc(athletes.createdAt));
+  clinician.get("/athletes", h(async (req, res) => {
+    const wantArchived = req.query.archived === "1";
+    const rows = (await db.select().from(athletes).orderBy(desc(athletes.createdAt))).filter((a) => Boolean(a.archivedAt) === wantArchived);
     const out = [];
     for (const a of rows) {
       const progs = await db.select().from(programs).where(eq(programs.athleteId, a.id));
@@ -347,6 +348,57 @@ export function createApp(db: Db) {
     await db.insert(invites).values({ tokenHash: sha256(token), athleteId, createdBy: actorOf(req), expiresAt: new Date(Date.now() + 7 * 86400_000) });
     await audit(actorOf(req), "invite", "athlete", athleteId, athleteId);
     res.status(201).json({ token, expiresInDays: 7 });
+  }));
+
+  /* ---------- archive / restore / permanent delete ---------- */
+  clinician.post("/athletes/:id/archive", h(async (req, res) => {
+    const athleteId = param(req, "id");
+    const a = await getAthlete(athleteId);
+    if (a.archivedAt) throw new HttpError(409, "Already archived.");
+    await db.update(athletes).set({ archivedAt: new Date() }).where(eq(athletes.id, athleteId));
+    const accounts = await db.select().from(users).where(eq(users.athleteId, athleteId));
+    for (const u of accounts) {
+      await db.update(users).set({ disabled: true }).where(eq(users.id, u.id));
+      await db.delete(schema.sessions).where(eq(schema.sessions.userId, u.id));
+    }
+    await audit(actorOf(req), "archive", "athlete", athleteId, athleteId, { name: a.name, reason: String(req.body?.reason ?? "") || null });
+    res.json({ ok: true });
+  }));
+
+  clinician.post("/athletes/:id/restore", h(async (req, res) => {
+    const athleteId = param(req, "id");
+    const a = await getAthlete(athleteId);
+    if (!a.archivedAt) throw new HttpError(409, "Not archived.");
+    await db.update(athletes).set({ archivedAt: null }).where(eq(athletes.id, athleteId));
+    await db.update(users).set({ disabled: false }).where(eq(users.athleteId, athleteId));
+    await audit(actorOf(req), "restore", "athlete", athleteId, athleteId, { name: a.name });
+    res.json({ ok: true });
+  }));
+
+  /** Permanent, irreversible. Only for an archived athlete, and the exact name must be typed. Audit detail that could hold their data is wiped. */
+  clinician.delete("/athletes/:id", h(async (req, res) => {
+    const athleteId = param(req, "id");
+    const a = await getAthlete(athleteId);
+    if (!a.archivedAt) throw new HttpError(409, "Archive the athlete first, then delete permanently.");
+    if (String(req.body?.confirmName ?? "") !== a.name) throw new HttpError(400, "The typed name does not match. Nothing was deleted.");
+    const actor = actorOf(req);
+    await db.transaction(async (tx) => {
+      const accountIds = (await tx.select({ id: users.id }).from(users).where(eq(users.athleteId, athleteId))).map((u) => u.id);
+      for (const uid of accountIds) await tx.delete(schema.sessions).where(eq(schema.sessions.userId, uid));
+      await tx.delete(sessionLogs).where(eq(sessionLogs.athleteId, athleteId));
+      await tx.delete(weeklyLogs).where(eq(weeklyLogs.athleteId, athleteId));
+      await tx.delete(programs).where(eq(programs.athleteId, athleteId));
+      await tx.delete(ptInterpretations).where(eq(ptInterpretations.athleteId, athleteId));
+      await tx.delete(engineReports).where(eq(engineReports.athleteId, athleteId));
+      await tx.delete(assessments).where(eq(assessments.athleteId, athleteId));
+      await tx.delete(invites).where(eq(invites.athleteId, athleteId));
+      await tx.delete(users).where(eq(users.athleteId, athleteId));
+      await tx.delete(athletes).where(eq(athletes.id, athleteId));
+      // Keep who/what/when, but wipe the content (assessment snapshots etc.) from this athlete's audit rows.
+      await tx.update(auditLog).set({ detail: null, athleteId: null }).where(eq(auditLog.athleteId, athleteId));
+    });
+    await audit(actor, "delete-athlete", "athlete", athleteId, null, { name: a.name, note: "Permanently deleted with all records." });
+    res.json({ ok: true });
   }));
 
   clinician.get("/athletes/:id/roadmap", h(async (req, res) => res.json(await roadmapFor(param(req, "id")))));
@@ -421,7 +473,9 @@ export function createApp(db: Db) {
     const rep = (await latestReport(a.id))?.report as EngineReport | undefined;
     const params = await loadParams();
     const report = rep ?? mod.interpret(data, params);
-    const program = mod.generateProgram(data, report, { params });
+    const requested = Number(req.body?.sessionsPerWeek);
+    const sessionsPerWeek = requested === 1 || requested === 3 ? requested : 2;
+    const program = mod.generateProgram(data, report, { params, sessionsPerWeek });
     // Replace any existing draft; approved programs stay until the new one is approved.
     const existing = await db.select().from(programs).where(and(eq(programs.athleteId, a.athleteId), eq(programs.status, "draft")));
     for (const e of existing) await db.update(programs).set({ status: "archived", updatedAt: new Date() }).where(eq(programs.id, e.id));
@@ -559,6 +613,7 @@ export function createApp(db: Db) {
       sessionLogs: logs.map((l) => ({ id: l.id, week: l.week, day: l.day, createdAt: l.createdAt, loggedBy: l.loggedBy, data: l.data, proposals: l.proposals })),
       weeklyLogs: weekly,
       roadmap: prog ? await roadmapFor(a.id) : null,
+      exerciseGuides: getModule(a.moduleId).exerciseGuides ?? {},
     });
   }));
 

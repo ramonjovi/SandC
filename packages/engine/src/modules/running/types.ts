@@ -88,6 +88,8 @@ export interface RunnerAssessment {
 
 export interface RunnerProgramOpts {
   startDate?: string | null;
+  /** Gym sessions per week: 1, 2 (default) or 3. */
+  sessionsPerWeek?: 1 | 2 | 3;
   /** Rule parameters (clinician overrides applied). Defaults are used when omitted. */
   params?: import("../../core/params").Params;
 }

@@ -7,6 +7,8 @@ export const athletes = pgTable("athletes", {
   name: text("name").notNull(),
   moduleId: text("module_id").notNull().default("running"),
   isSynthetic: boolean("is_synthetic").notNull().default(false),
+  /** Set when archived: hidden from the list, athlete sign-in disabled. Reversible until permanently deleted. */
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 

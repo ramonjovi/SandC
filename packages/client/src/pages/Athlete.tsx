@@ -4,6 +4,7 @@ import { Activity, CalendarCheck, CheckCircle2, Dumbbell, Map as MapIcon, UserRo
 import type { PrescribedExercise, ProgramSession } from "@tpc/engine";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Textarea } from "@/components/ui";
 import { Roadmap } from "@/components/Roadmap";
+import { ExerciseHowTo } from "@/components/ExerciseHowTo";
 import { LogForm, unitLabel } from "@/components/LogForm";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -102,6 +103,7 @@ function Workouts({ code, me, reload }: { code: string; me: any; reload: () => v
                     <div className="font-medium text-sm">{e.name}</div>
                     <div className="text-sm">{e.sets} × {e.reps} {unitLabel(e)}{e.extraSetSide ? ` (+1 set ${e.extraSetSide})` : ""}{e.loadKg != null ? ` @ ${e.loadKg} kg` : e.category === "plyometric" ? " · bodyweight" : ""}{e.rir != null ? ` · stop with ${e.rir} reps left` : ""} · rest {Math.round(e.restSec / 60 * 10) / 10} min</div>
                     {e.cue && <div className="text-xs text-muted-foreground">{e.cue}</div>}
+                    <div className="mt-1"><ExerciseHowTo guide={me.exerciseGuides?.[e.exerciseId]} audience="athlete" /></div>
                     {e.notes && <div className="text-xs text-amber-800">{e.notes}</div>}
                     {prop && <div className="mt-1 rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-900"><b>Next time:</b> {prop.nextLoadKg != null ? `${prop.nextLoadKg} kg · ` : ""}{prop.nextSets} × {prop.nextReps}. {prop.reason} <i>(your clinician confirms)</i></div>}
                   </div>

@@ -3,6 +3,7 @@ import { generateRunnerProgram } from "./program";
 import { computeMetrics, interpretRunner, PRIORITY_DEFS } from "./interpret";
 import { RUNNING_RULES } from "./rules";
 import { RUNNING_PROTOCOLS } from "./protocols";
+import { EXERCISE_GUIDES } from "./exerciseGuides";
 import type { RunnerAssessment, RunnerProgramOpts } from "./types";
 
 export const runningModule: SportModule<RunnerAssessment, RunnerProgramOpts> = {
@@ -10,6 +11,7 @@ export const runningModule: SportModule<RunnerAssessment, RunnerProgramOpts> = {
   name: "Running (800 m to marathon)",
   rules: RUNNING_RULES,
   protocols: RUNNING_PROTOCOLS,
+  exerciseGuides: EXERCISE_GUIDES,
   priorityKeys: () => PRIORITY_DEFS,
   interpret: interpretRunner,
   computeMetrics,
@@ -25,4 +27,5 @@ export * from "./interpret";
 export * from "./program";
 export * from "./exercises";
 export * from "./protocols";
+export * from "./exerciseGuides";
 export { RUNNING_RULES } from "./rules";
