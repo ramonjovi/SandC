@@ -53,7 +53,7 @@ export const ANALYSIS_PHASES: AnalysisPhase[] = [
   {
     id: "knee-flexion", label: "Peak knee flexion", view: "side", reportTitle: "How much your knee bends in stance",
     capture: "Side view, mid-stance (foot flat under the body), with hip, knee and ankle marked.",
-    lookFor: "The angle at the knee. About 45 degrees is typical.",
+    lookFor: "The angle inside the knee between thigh and shin (a straight leg reads 180 degrees). Knee bend = 180 minus that angle, and about 45 degrees of bend is typical. Enter the bend, not the inside angle.",
     finding: (a) => (a.biomechanics.peakKneeFlexionDeg == null ? null : `${a.biomechanics.peakKneeFlexionDeg}° of knee bend`),
     discussion: (a) => {
       const k = a.biomechanics.peakKneeFlexionDeg;

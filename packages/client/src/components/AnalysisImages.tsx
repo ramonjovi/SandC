@@ -24,6 +24,11 @@ export function AnalysisImages({ assessment, data }: { assessment: any; data: an
   async function upload(phase: string, dataUrl: string, measure: string) {
     setErr("");
     const p = PHASES.find((x) => x.id === phase)!;
+    // An angle tool gives the angle INSIDE the knee (straight leg = 180). Knee bend = 180 - that angle.
+    if (phase === "knee-flexion") {
+      const m = /Angle ([\d.]+)°/.exec(measure);
+      if (m) measure = `${measure} (knee bend about ${Math.round((180 - Number(m[1])) * 10) / 10}°)`;
+    }
     try {
       await api(`/assessments/${assessment.id}/images`, { method: "POST", body: { phase, dataUrl, measure, caption: p.label, discussion: p.discussion(data) } });
       setPick(null); reload();
