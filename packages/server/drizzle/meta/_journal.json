@@ -8,6 +8,13 @@
       "when": 1792033107137,
       "tag": "0000_panoramic_miek",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792034159112,
+      "tag": "0001_wise_elektra",
+      "breakpoints": true
     }
   ]
 }

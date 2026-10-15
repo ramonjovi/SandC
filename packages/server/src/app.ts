@@ -6,7 +6,8 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { and, asc, desc, eq } from "drizzle-orm";
 import { ZodError } from "zod";
 import {
-  allRules, checkWeeklyVolume, compareInterpretations, epley1RM, getModule, listModules, objectiveProgress, proposeNextTargets,
+  allRules, checkWeeklyVolume, compareInterpretations, epley1RM, getModule, listModules, objectiveProgress, paramsFor, progressionConfigFrom,
+  proposeNextTargets, weeklyCapPct, type RuleOverrides,
   type EngineReport, type PtInterpretation, type Program, type PrescribedExercise, type SessionLog,
 } from "@tpc/engine";
 import { schema, type Db } from "./db";
@@ -18,7 +19,7 @@ import {
   ApproveSchema, AssessmentSchema, CreateAthleteSchema, PtSchema, SessionLogSchema, WeeklyLogSchema, parseAssessment,
 } from "./schemas";
 
-const { athletes, assessments, engineReports, ptInterpretations, programs, sessionLogs, weeklyLogs, auditLog, users, invites } = schema;
+const { athletes, assessments, engineReports, ptInterpretations, programs, sessionLogs, weeklyLogs, auditLog, users, invites, ruleOverrides } = schema;
 
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -63,6 +64,14 @@ export function createApp(db: Db) {
     (await db.select().from(engineReports).where(eq(engineReports.assessmentId, assessmentId)).orderBy(desc(engineReports.createdAt)))[0];
   const latestPt = async (assessmentId: string) =>
     (await db.select().from(ptInterpretations).where(eq(ptInterpretations.assessmentId, assessmentId)).orderBy(desc(ptInterpretations.createdAt)))[0];
+
+  /** Clinician overrides of rule defaults, as the engine's parameter store. */
+  const loadOverrides = async (): Promise<RuleOverrides> => {
+    const out: RuleOverrides = {};
+    for (const r of await db.select().from(ruleOverrides)) (out[r.ruleId] ??= {})[r.key] = r.value;
+    return out;
+  };
+  const loadParams = async () => paramsFor(await loadOverrides());
 
   async function roadmapFor(athleteId: string) {
     const athlete = await getAthlete(athleteId);
@@ -225,6 +234,50 @@ export function createApp(db: Db) {
   });
 
   /* ---------- athletes ---------- */
+  /* ---------- rule defaults (global, clinician-editable, audited) ---------- */
+  clinician.get("/rules/overrides", h(async (_req, res) => {
+    const rows = await db.select().from(ruleOverrides);
+    res.json(rows.map((r) => ({ ruleId: r.ruleId, key: r.key, value: r.value, updatedBy: r.updatedBy, updatedAt: r.updatedAt })));
+  }));
+
+  clinician.get("/rules/audit", h(async (_req, res) => {
+    res.json(await db.select().from(auditLog).where(eq(auditLog.entity, "rule_default")).orderBy(desc(auditLog.at)).limit(200));
+  }));
+
+  clinician.put("/rules/:ruleId/defaults", h(async (req, res) => {
+    const ruleId = param(req, "ruleId");
+    const rule = allRules().find((r) => r.id === ruleId);
+    if (!rule?.paramMeta) throw new HttpError(404, "This rule has no editable values.");
+    const reason = String(req.body?.reason ?? "").trim();
+    if (reason.length < 5) throw new HttpError(400, "A reason for the change is required (at least 5 characters).");
+    const current = (await loadOverrides())[ruleId] ?? {};
+    const effective = (k: string) => current[k] ?? (rule.defaults![k] as number);
+    const next: Record<string, number> = {};
+    if (req.body?.reset === true) {
+      for (const k of Object.keys(rule.paramMeta)) next[k] = rule.defaults![k] as number;
+    } else {
+      const values = req.body?.values;
+      if (!values || typeof values !== "object") throw new HttpError(400, "No values supplied.");
+      for (const [k, v] of Object.entries(values as Record<string, unknown>)) {
+        const meta = rule.paramMeta[k];
+        if (!meta) throw new HttpError(400, `${k} is not an editable value of this rule.`);
+        if (typeof v !== "number" || !Number.isFinite(v)) throw new HttpError(400, `${meta.label}: enter a number.`);
+        if (v < meta.min || v > meta.max) throw new HttpError(400, `${meta.label}: must be between ${meta.min} and ${meta.max}.`);
+        next[k] = v;
+      }
+    }
+    const changes = Object.entries(next).filter(([k, v]) => v !== effective(k)).map(([k, v]) => ({ key: k, from: effective(k), to: v, default: rule.defaults![k] as number }));
+    if (changes.length === 0) throw new HttpError(400, "Nothing changed.");
+    const actor = actorOf(req);
+    for (const c of changes) {
+      if (c.to === c.default) await db.delete(ruleOverrides).where(and(eq(ruleOverrides.ruleId, ruleId), eq(ruleOverrides.key, c.key)));
+      else await db.insert(ruleOverrides).values({ ruleId, key: c.key, value: c.to, updatedBy: actor })
+        .onConflictDoUpdate({ target: [ruleOverrides.ruleId, ruleOverrides.key], set: { value: c.to, updatedBy: actor, updatedAt: new Date() } });
+    }
+    await audit(actor, req.body?.reset === true ? "reset-default" : "edit-default", "rule_default", ruleId, null, { reason, ruleStatus: rule.status, changes });
+    res.json({ ok: true, changes });
+  }));
+
   clinician.get("/athletes", h(async (_req, res) => {
     const rows = await db.select().from(athletes).orderBy(desc(athletes.createdAt));
     const out = [];
@@ -302,7 +355,7 @@ export function createApp(db: Db) {
   clinician.post("/assessments/:id/interpret", h(async (req, res) => {
     const a = await getAssessment(param(req, "id"));
     const athlete = await getAthlete(a.athleteId);
-    const report = getModule(athlete.moduleId).interpret(parseAssessment(a.data));
+    const report = getModule(athlete.moduleId).interpret(parseAssessment(a.data), await loadParams());
     const reportId = id();
     await db.insert(engineReports).values({ id: reportId, athleteId: a.athleteId, assessmentId: a.id, report });
     await audit("engine", "interpret", "engine_report", reportId, a.athleteId, { engineVersion: report.engineVersion, strategy: report.strategy.key });
@@ -343,8 +396,9 @@ export function createApp(db: Db) {
     const mod = getModule(athlete.moduleId);
     const data = parseAssessment(a.data);
     const rep = (await latestReport(a.id))?.report as EngineReport | undefined;
-    const report = rep ?? mod.interpret(data);
-    const program = mod.generateProgram(data, report, {});
+    const params = await loadParams();
+    const report = rep ?? mod.interpret(data, params);
+    const program = mod.generateProgram(data, report, { params });
     // Replace any existing draft; approved programs stay until the new one is approved.
     const existing = await db.select().from(programs).where(and(eq(programs.athleteId, a.athleteId), eq(programs.status, "draft")));
     for (const e of existing) await db.update(programs).set({ status: "archived", updatedAt: new Date() }).where(eq(programs.id, e.id));
@@ -440,7 +494,7 @@ export function createApp(db: Db) {
     const log: SessionLog = { ...body, performedAt: body.performedAt ?? new Date().toISOString(), exercises: body.exercises };
     const all = await assessmentsFor(a.id);
     const cmjBase = (all[0]?.data as any)?.physical?.cmjHeightCm ?? null;
-    const proposals = proposeNextTargets(session.exercises as PrescribedExercise[], log, { cmjBaselineCm: cmjBase });
+    const proposals = proposeNextTargets(session.exercises as PrescribedExercise[], log, { cmjBaselineCm: cmjBase, config: progressionConfigFrom(await loadParams()) });
     const logId = id();
     await db.insert(sessionLogs).values({ id: logId, athleteId: a.id, programId: prog.id, week: body.week, day: body.day, data: log, proposals });
     await audit(a.name, "log-session", "session_log", logId, a.id, { week: body.week, day: body.day });
@@ -452,7 +506,7 @@ export function createApp(db: Db) {
     const body = WeeklyLogSchema.parse(req.body);
     const prev = (await db.select().from(weeklyLogs).where(eq(weeklyLogs.athleteId, a.id)).orderBy(desc(weeklyLogs.weekStart)))
       .find((w) => w.weekStart < body.weekStart);
-    const volumeFlag = prev ? checkWeeklyVolume(prev.runKm, body.runKm) : null;
+    const volumeFlag = prev ? checkWeeklyVolume(prev.runKm, body.runKm, weeklyCapPct(await loadParams())) : null;
     const logId = id();
     await db.insert(weeklyLogs).values({ id: logId, athleteId: a.id, weekStart: body.weekStart, runKm: body.runKm, painModifiedTraining: body.painModifiedTraining, notes: body.notes ?? null, volumeFlag });
     await audit(a.name, "log-week", "weekly_log", logId, a.id, { ...body, volumeFlag });

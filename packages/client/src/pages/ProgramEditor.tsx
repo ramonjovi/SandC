@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { running, STRATEGY_LABEL, type EngineReport, type PrescribedExercise, type Program } from "@tpc/engine";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Select, Textarea } from "@/components/ui";
-import { RuleBadges } from "@/components/RuleBadge";
+import { OverrideNotice, RuleBadges } from "@/components/RuleBadge";
 import { api } from "@/lib/api";
 import { cn, fmtDateTime } from "@/lib/utils";
 
@@ -66,6 +66,7 @@ export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: 
           <CardDescription>Strategy: {STRATEGY_LABEL[program.strategy.key]} ({program.strategy.emphasis} emphasis). You can edit any prescription; edits are audited.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
+          <OverrideNotice overrides={program.paramOverrides} />
           {program.restrictionsApplied.map((r) => <Alert key={r} tone="warn">{r}</Alert>)}
           <details className="text-sm"><summary className="cursor-pointer font-medium">Assumptions to review ({program.assumptions.length})</summary>
             <ul className="ml-5 mt-1 list-disc text-muted-foreground">{program.assumptions.map((a) => <li key={a}>{a}</li>)}</ul></details>

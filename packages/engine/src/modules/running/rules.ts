@@ -67,6 +67,7 @@ export const RUNNING_RULES: Rule[] = [
       "When no clear strength or power deficit exists, tilt emphasis toward plyometric at target speeds <=12 km/h and toward strength above 12 km/h. A measured deficit always outranks this tilt. Applies to economy only; performance moderators were not significant.",
     verification: "12 km/h comes from the plyometric result; using it as the switch point for high-load is a software default.",
     defaults: { switchSpeedKmh: 12 },
+    paramMeta: { switchSpeedKmh: { label: "Target speed that switches emphasis", min: 6, max: 20, step: 0.5, unit: "km/h" } },
   },
   {
     id: "running.strategy.vo2max-55",
@@ -110,6 +111,10 @@ export const RUNNING_RULES: Rule[] = [
     statement: "DSI = CMJ peak force / IMTP peak force, used to decide whether an athlete needs ballistic, concurrent or maximal-strength emphasis. Software bands: <0.60 strength deficit; >0.80 power deficit.",
     verification: "The ratio and its purpose are confirmed in High-Performance Training for Sports ch. 1. The 0.60 / 0.80 bands do NOT appear in that text and remain unverified; they are editable defaults.",
     defaults: { strengthDeficitBelow: 0.6, powerDeficitAbove: 0.8 },
+    paramMeta: {
+      strengthDeficitBelow: { label: "DSI below this = strength deficit", min: 0.3, max: 0.9, step: 0.05, unit: "ratio" },
+      powerDeficitAbove: { label: "DSI above this = power deficit", min: 0.5, max: 1.2, step: 0.05, unit: "ratio" },
+    },
   },
   {
     id: "running.strength.squat-ratio",
@@ -119,7 +124,11 @@ export const RUNNING_RULES: Rule[] = [
     statement: "Reference: >1.5x body mass (male), >1.2x (female). Below ~1.2x (male) / ~1.0x (female) treated as a strength priority.",
     verification:
       "KB uses 1.2x as a deficit trigger in one table and as a female target in another. Deficit values here are software defaults, shown as editable.",
-    defaults: { deficitMale: 1.2, deficitFemale: 1.0, targetMale: 1.5, targetFemale: 1.2 },
+    defaults: { deficitMale: 1.2, deficitFemale: 1.0 },
+    paramMeta: {
+      deficitMale: { label: "Squat 1RM / body mass below this = strength priority (male)", min: 0.5, max: 2, step: 0.05, unit: "x BM" },
+      deficitFemale: { label: "Squat 1RM / body mass below this = strength priority (female/other)", min: 0.4, max: 1.8, step: 0.05, unit: "x BM" },
+    },
   },
   {
     id: "running.imtp.reference",
@@ -137,6 +146,10 @@ export const RUNNING_RULES: Rule[] = [
     statement: "Flag side-to-side differences and add one extra set on the weaker limb.",
     verification: "Cutoffs not verified.",
     defaults: { sebtCm: 4, calfPct: 10 },
+    paramMeta: {
+      sebtCm: { label: "SEBT / Y-balance asymmetry flag", min: 1, max: 10, step: 0.5, unit: "cm" },
+      calfPct: { label: "Calf-raise asymmetry flag", min: 3, max: 30, step: 1, unit: "%" },
+    },
   },
   {
     id: "running.gait.observation",
@@ -155,6 +168,7 @@ export const RUNNING_RULES: Rule[] = [
     statement: "If overstriding is observed AND the runner is symptomatic, suggest raising cadence by 5-10% with a metronome.",
     verification: "Magnitude from KB; not page-checked.",
     defaults: { cadenceIncreasePct: 7.5 },
+    paramMeta: { cadenceIncreasePct: { label: "Cadence increase target", min: 5, max: 10, step: 0.5, unit: "%" } },
   },
   {
     id: "running.vdot.formula",
@@ -172,6 +186,12 @@ export const RUNNING_RULES: Rule[] = [
     statement: "E 66% (book: easy runs span 59-74% of VDOT, average 66%), M 80% (book: 75-84%), T 86% (book: mid-to-upper 80s), I 97.5%. R = I pace minus the pacing gap.",
     verification: "Ranges for E, M, T and R (105-110%) are in the book. The single point values chosen inside those ranges are software defaults and are editable.",
     defaults: { E: 0.66, M: 0.8, T: 0.86, I: 0.975 },
+    paramMeta: {
+      E: { label: "Easy pace, fraction of VDOT (book range 0.59-0.74)", min: 0.59, max: 0.74, step: 0.01, unit: "fraction" },
+      M: { label: "Marathon pace (book range 0.75-0.84)", min: 0.75, max: 0.84, step: 0.01, unit: "fraction" },
+      T: { label: "Threshold pace (book: mid-to-upper 80s)", min: 0.8, max: 0.9, step: 0.01, unit: "fraction" },
+      I: { label: "Interval pace", min: 0.9, max: 1, step: 0.005, unit: "fraction" },
+    },
   },
   {
     id: "running.vdot.six-second",
@@ -181,6 +201,11 @@ export const RUNNING_RULES: Rule[] = [
     statement: "I pace is about 6 s per 400 m slower than R, and T about 6 s slower than I; the gap widens to 7-8 s for runners in the VDOT 50 and 40 categories.",
     verification: "Quoted rule checked in the book. The VDOT bands used (>=55: 6 s, 45-54: 7 s, <45: 8 s) are a software reading of 'the 50 or 40 VDOT categories'.",
     defaults: { gapHigh: 6, gapMid: 7, gapLow: 8 },
+    paramMeta: {
+      gapHigh: { label: "R-to-I gap, VDOT 55 and above", min: 4, max: 10, step: 0.5, unit: "s/400 m" },
+      gapMid: { label: "R-to-I gap, VDOT 45-54", min: 4, max: 10, step: 0.5, unit: "s/400 m" },
+      gapLow: { label: "R-to-I gap, VDOT below 45", min: 4, max: 12, step: 0.5, unit: "s/400 m" },
+    },
   },
   {
     id: "running.vdot.break-adjustment",
@@ -198,7 +223,6 @@ export const RUNNING_RULES: Rule[] = [
     statement:
       "Weeks 1-4 emphasise maximal strength and robustness; weeks 5-8 use complex/contrast pairs. Intensity 80-87.5% 1RM; unload weeks cut sets ~45% and keep intensity.",
     verification: "Block periodization is source-attributed; the week-by-week percentages are a software default, editable per exercise.",
-    defaults: { unloadVolumeCut: 0.45 },
   },
   {
     id: "running.program.soleus",
@@ -226,6 +250,11 @@ export const RUNNING_RULES: Rule[] = [
       "Runners new to plyometrics start with 30-50 foot contacts per session of low-intensity work (skips, short hops, drills) 2-3 times per week, progress to 50-80 and then 80-100; highly trained runners with several years of resistance training may exceed 120.",
     verification: "Read in the book text. Tier mapping used here: novice <=50, intermediate <=80, experienced <=100 contacts per session.",
     defaults: { novice: 50, intermediate: 80, experienced: 100 },
+    paramMeta: {
+      novice: { label: "Max contacts per session, novice", min: 20, max: 60, step: 5, unit: "contacts" },
+      intermediate: { label: "Max contacts per session, intermediate", min: 40, max: 100, step: 5, unit: "contacts" },
+      experienced: { label: "Max contacts per session, experienced", min: 60, max: 140, step: 5, unit: "contacts" },
+    },
   },
   {
     id: "running.strength.training-age",
@@ -235,6 +264,10 @@ export const RUNNING_RULES: Rule[] = [
     statement: "Novices make gains with 3 or fewer sets per exercise; advanced athletes generally need more than 3. Strength/power work uses 2-5 minute rests; fewer sets are used in the competitive phase.",
     verification: "Read in the book text. Tier thresholds (<1 y novice, 1-3 y intermediate, 3+ y experienced) and the lower novice intensities (70-80% 1RM) are software defaults.",
     defaults: { noviceMaxSets: 3, advancedMaxSets: 4 },
+    paramMeta: {
+      noviceMaxSets: { label: "Max sets per exercise, novice", min: 1, max: 4, step: 1, unit: "sets" },
+      advancedMaxSets: { label: "Max sets per exercise, intermediate/experienced", min: 2, max: 6, step: 1, unit: "sets" },
+    },
   },
   {
     id: "running.concurrent.scheduling",
@@ -252,6 +285,11 @@ export const RUNNING_RULES: Rule[] = [
     source: "NSCA Developing Endurance 2nd ed., ch. 3 and 6",
     statement: "Tapers last 1-4 weeks; volume falls while intensity is maintained, with a 40-60% load reduction 8-14 days before the event; keep training frequency rather than dropping sessions.",
     verification: "Read in the book text. Program taper (about 40% set cut, then a light race-week session) is a software application of that range.",
+    defaults: { taperSetCut: 0.4, raceWeekSetCut: 0.5 },
+    paramMeta: {
+      taperSetCut: { label: "Set reduction in the taper week", min: 0.2, max: 0.6, step: 0.05, unit: "fraction" },
+      raceWeekSetCut: { label: "Set reduction in race week", min: 0.3, max: 0.8, step: 0.05, unit: "fraction" },
+    },
   },
   {
     id: "running.taper.race-week",

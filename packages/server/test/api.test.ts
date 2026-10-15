@@ -235,3 +235,76 @@ describe("safety gate (Sam)", () => {
     await pt.post(`/api/programs/${p.body.id}/approve`).send({ screeningReviewed: true, clearanceNote: "Reviewed with sports physician; cleared for strength work." }).expect(200);
   });
 });
+
+describe("global rule defaults (editable, audited)", () => {
+  it("requires a clinician and a reason, and enforces bounds", async () => {
+    await client().put("/api/rules/running.dsi/defaults").send({ values: { strengthDeficitBelow: 0.7 }, reason: "testing" }).expect(401);
+    await pt.put("/api/rules/running.dsi/defaults").send({ values: { strengthDeficitBelow: 0.7 } }).expect(400);
+    await pt.put("/api/rules/running.dsi/defaults").send({ values: { strengthDeficitBelow: 5 }, reason: "too high" }).expect(400);
+    await pt.put("/api/rules/running.dsi/defaults").send({ values: { nonsense: 1 }, reason: "bad key" }).expect(400);
+    await pt.put("/api/rules/running.vdot.formula/defaults").send({ values: { x: 1 }, reason: "no params" }).expect(404);
+    await pt.put("/api/rules/running.dsi/defaults").send({ values: { strengthDeficitBelow: 0.6 }, reason: "same as default" }).expect(400);
+  });
+
+  it("athletes cannot read or change rule defaults", async () => {
+    const a = await newAthlete(SYNTHETIC_ALEX);
+    const { agent } = await athleteSession(a.id, "rules-ath@x.test");
+    await agent.get("/api/rules/overrides").expect(403);
+    await agent.put("/api/rules/running.dsi/defaults").send({ values: { strengthDeficitBelow: 0.7 }, reason: "sneaky" }).expect(403);
+  });
+
+  it("changes apply to new interpretations only, are recorded on them, and are audited", async () => {
+    const a = await newAthlete(SYNTHETIC_ALEX); // DSI 0.65
+    const before = (await pt.post(`/api/assessments/${a.assessmentId}/interpret`).expect(201)).body;
+    expect(before.priorities.some((p: any) => p.key === "max_strength")).toBe(false);
+
+    const put = await pt.put("/api/rules/running.dsi/defaults").send({ values: { strengthDeficitBelow: 0.7 }, reason: "Clinic prefers a stricter DSI cut-off" }).expect(200);
+    expect(put.body.changes[0]).toMatchObject({ key: "strengthDeficitBelow", from: 0.6, to: 0.7 });
+
+    const after = (await pt.post(`/api/assessments/${a.assessmentId}/interpret`).expect(201)).body;
+    expect(after.priorities[0].key).toBe("max_strength");
+    expect(after.paramOverrides).toEqual({ "running.dsi": { strengthDeficitBelow: 0.7 } });
+    // the earlier report is untouched
+    const detail = (await pt.get(`/api/athletes/${a.id}`)).body.assessments[0];
+    expect(detail.report.paramOverrides).toEqual({ "running.dsi": { strengthDeficitBelow: 0.7 } }); // latest
+    expect(before.paramOverrides).toEqual({});
+
+    const audit = (await pt.get("/api/rules/audit").expect(200)).body;
+    const e = audit.find((x: any) => x.entityId === "running.dsi" && x.action === "edit-default");
+    expect(e.actor).toBe("Dr. PT");
+    expect(e.detail.reason).toMatch(/stricter/);
+    expect(e.detail.ruleStatus).toBe("needs_verification");
+    expect(e.detail.changes[0]).toMatchObject({ from: 0.6, to: 0.7 });
+
+    const list = (await pt.get("/api/rules/overrides")).body;
+    expect(list).toEqual([expect.objectContaining({ ruleId: "running.dsi", key: "strengthDeficitBelow", value: 0.7, updatedBy: "Dr. PT" })]);
+  });
+
+  it("reset restores the built-in default and is audited", async () => {
+    await pt.put("/api/rules/running.dsi/defaults").send({ reset: true, reason: "Back to defaults" }).expect(200);
+    expect((await pt.get("/api/rules/overrides")).body).toEqual([]);
+    const audit = (await pt.get("/api/rules/audit")).body;
+    expect(audit.some((x: any) => x.action === "reset-default")).toBe(true);
+    await pt.put("/api/rules/running.dsi/defaults").send({ reset: true, reason: "nothing to reset" }).expect(400);
+  });
+
+  it("progression and weekly-cap overrides affect athlete logging", async () => {
+    await pt.put("/api/rules/core.load.weekly-cap/defaults").send({ values: { capPct: 20 }, reason: "Allow bigger build weeks" }).expect(200);
+    await pt.put("/api/rules/core.progression.load/defaults").send({ values: { incEasyPct: 7.5 }, reason: "Faster progression for trained group" }).expect(200);
+    const a = await newAthlete(SYNTHETIC_ALEX);
+    await pt.post(`/api/assessments/${a.assessmentId}/interpret`);
+    const p = await pt.post(`/api/assessments/${a.assessmentId}/program`).expect(201);
+    await pt.post(`/api/programs/${p.body.id}/approve`).send({ screeningReviewed: true }).expect(200);
+    const me = (await athleteSession(a.id, "ovr@x.test")).agent;
+    await me.post("/api/me/weekly-logs").send({ weekStart: "2026-09-28", runKm: 50 }).expect(201);
+    expect((await me.post("/api/me/weekly-logs").send({ weekStart: "2026-10-05", runKm: 58 })).body.volumeFlag.ok).toBe(true); // +16% under the 20% cap
+    const prog = (await pt.get(`/api/athletes/${a.id}`)).body.programs[0].data;
+    const squat = prog.weeks[0].sessions[0].exercises.find((e: any) => e.exerciseId === "back_squat");
+    const r = await me.post("/api/me/session-logs").send({
+      week: 1, day: 1,
+      exercises: [{ prescribedId: squat.id, exerciseId: "back_squat", sets: Array.from({ length: squat.sets }, () => ({ reps: squat.reps, loadKg: squat.loadKg })), rirFinal: 2, pain: null }],
+    }).expect(201);
+    const t = r.body.proposals.find((x: any) => x.exerciseId === "back_squat");
+    expect(t.nextLoadKg).toBe(Math.round((squat.loadKg * 1.075) / 2.5) * 2.5);
+  });
+});

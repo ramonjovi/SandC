@@ -1,6 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  allRules, objectiveProgress, checkWeeklyVolume, compareInterpretations, epley1RM, proposeNextTargets, roundLoad, running,
+  allRules, makeParams, paramsFor, progressionConfigFrom, weeklyCapPct, objectiveProgress, checkWeeklyVolume, compareInterpretations, epley1RM, proposeNextTargets, roundLoad, running,
   type PrescribedExercise, type SessionLog,
 } from "../src";
 import { SYNTHETIC_ALEX, SYNTHETIC_SAM } from "../src/fixtures";
@@ -315,5 +317,78 @@ describe("program content", () => {
     const q = generateRunnerProgram(past, interpretRunner(past), { startDate: "2026-10-14" });
     expect(q.durationWeeks).toBe(8);
     expect(q.assumptions.join(" ")).toMatch(/past/);
+  });
+});
+
+describe("editable rule defaults (overrides)", () => {
+  const rules = allRules();
+  it("every editable parameter has metadata, valid bounds and a default inside them", () => {
+    for (const r of rules) {
+      const keys = Object.keys(r.defaults ?? {});
+      expect(Object.keys(r.paramMeta ?? {}).sort(), r.id).toEqual(keys.sort());
+      for (const [k, m] of Object.entries(r.paramMeta ?? {})) {
+        const d = r.defaults![k] as number;
+        expect(m.min, `${r.id}.${k}`).toBeLessThan(m.max);
+        expect(d, `${r.id}.${k}`).toBeGreaterThanOrEqual(m.min);
+        expect(d, `${r.id}.${k}`).toBeLessThanOrEqual(m.max);
+      }
+    }
+  });
+  it("every editable parameter is actually read by the engine", () => {
+    const dir = path.resolve(__dirname, "../src");
+    const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+    const code = walk(dir).filter((f) => f.endsWith(".ts") && !f.endsWith("rules.ts")).map((f) => fs.readFileSync(f, "utf8")).join("\n");
+    for (const r of rules) for (const k of Object.keys(r.defaults ?? {})) expect(code.includes(`"${k}"`), `${r.id}.${k} is never read`).toBe(true);
+  });
+  it("unknown parameters throw and out-of-registry overrides are ignored", () => {
+    const p = paramsFor({ "nope.rule": { x: 1 }, "running.dsi": { strengthDeficitBelow: 0.5, bogus: 3 } });
+    expect(p.get("running.dsi", "strengthDeficitBelow")).toBe(0.5);
+    expect(() => p.get("running.dsi", "bogus")).toThrow();
+    expect(p.overrides()).toEqual({ "running.dsi": { strengthDeficitBelow: 0.5 } });
+  });
+  it("overrides equal to the default are dropped", () => {
+    expect(paramsFor({ "running.dsi": { strengthDeficitBelow: 0.6 } }).overrides()).toEqual({});
+  });
+  it("DSI bands change the interpretation and are recorded on the report", () => {
+    const base = interpretRunner(SYNTHETIC_ALEX); // DSI 0.65 = balanced
+    expect(base.priorities.some((p) => p.key === "max_strength")).toBe(false);
+    const strict = interpretRunner(SYNTHETIC_ALEX, paramsFor({ "running.dsi": { strengthDeficitBelow: 0.7 } }));
+    expect(strict.priorities[0].key).toBe("max_strength");
+    expect(strict.paramOverrides).toEqual({ "running.dsi": { strengthDeficitBelow: 0.7 } });
+    expect(base.paramOverrides).toEqual({});
+  });
+  it("speed switch point changes the strategy", () => {
+    const noDeficit = { ...SYNTHETIC_ALEX };
+    expect(interpretRunner(noDeficit).strategy.emphasis).toBe("strength"); // 15.6 km/h > 12
+    expect(interpretRunner(noDeficit, paramsFor({ "running.strategy.speed-tilt": { switchSpeedKmh: 16 } })).strategy.emphasis).toBe("power");
+  });
+  it("contact caps and set caps apply to generated programs", () => {
+    const p0 = paramsFor({ "running.plyo.contacts": { intermediate: 40 }, "running.strength.training-age": { advancedMaxSets: 3 } });
+    const rep = interpretRunner(SYNTHETIC_ALEX, p0);
+    const prog = generateRunnerProgram(SYNTHETIC_ALEX, rep, { params: p0 });
+    for (const w of prog.weeks) for (const s of w.sessions) {
+      expect(contacts(s.exercises)).toBeLessThanOrEqual(40);
+      for (const e of s.exercises.filter((x) => x.category === "strength")) expect(e.sets).toBeLessThanOrEqual(3);
+    }
+    expect(prog.paramOverrides).toHaveProperty("running.plyo.contacts");
+  });
+  it("unload cut changes unload-week set counts", () => {
+    const sets = (cut: number) => {
+      const p = paramsFor({ "core.periodization.3to1": { unloadVolumeCut: cut } });
+      const prog = generateRunnerProgram(SYNTHETIC_ALEX, interpretRunner(SYNTHETIC_ALEX, p), { params: p });
+      return prog.weeks[3].sessions[0].exercises.find((e) => e.exerciseId === "back_squat")!.sets;
+    };
+    expect(sets(0.2)).toBeGreaterThan(sets(0.7));
+  });
+  it("pace fractions and progression settings flow through", () => {
+    expect(paceZones(50, paramsFor({ "running.vdot.paces": { T: 0.89 } })).T).toBeLessThan(paceZones(50).T);
+    const cfg = progressionConfigFrom(paramsFor({ "core.progression.load": { incEasyPct: 7.5 } }));
+    expect(cfg.incEasyPct).toBe(7.5);
+    const [t] = proposeNextTargets([ex()], logFor([[5, 100], [5, 100], [5, 100]], 2), { config: cfg });
+    expect(t.nextLoadKg).toBe(107.5);
+    expect(weeklyCapPct(paramsFor({ "core.load.weekly-cap": { capPct: 15 } }))).toBe(15);
+  });
+  it("makeParams accepts a custom rule list", () => {
+    expect(makeParams([{ id: "x", title: "", status: "proposed_default", source: null, statement: "", verification: "", defaults: { a: 1 } }]).get("x", "a")).toBe(1);
   });
 });

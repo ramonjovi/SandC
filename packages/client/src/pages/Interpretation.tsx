@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Bot, UserRound } from "lucide-react";
 import { STRATEGY_LABEL, type EngineReport } from "@tpc/engine";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Label, Select, Textarea } from "@/components/ui";
-import { RuleBadge, RuleBadges, StatusBadge } from "@/components/RuleBadge";
+import { OverrideNotice, RuleBadge, RuleBadges, StatusBadge } from "@/components/RuleBadge";
 import { api } from "@/lib/api";
 import { useMeta } from "@/lib/meta";
 import { cn, formatTime } from "@/lib/utils";
@@ -43,6 +43,8 @@ export function Interpretation({ assessment, onChanged, goProgram }: { assessmen
         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Bot className="h-4 w-4" /> Independent engine interpretation · v{report.engineVersion}</div>
         <Button variant="outline" size="sm" onClick={run} disabled={busy}>Re-run on latest data</Button>
       </div>
+
+      <OverrideNotice overrides={report.paramOverrides} />
 
       {report.safetyFlags.length > 0 && (
         <Card className="border-rose-300">

@@ -15,6 +15,8 @@ export interface Rule {
   verification: string;
   /** Clinician-editable default value(s), when the rule carries numbers. */
   defaults?: Record<string, number | string>;
+  /** Editing metadata for numeric defaults (label, unit, allowed range). Only keys listed here are clinician-editable. */
+  paramMeta?: Record<string, { label: string; min: number; max: number; step?: number; unit?: string }>;
 }
 
 export type Severity = "info" | "attention" | "priority";
@@ -73,6 +75,8 @@ export interface EngineReport {
   missingData: string[];
   /** Rule ids that were actually used, so the UI can show provenance. */
   rulesUsed: string[];
+  /** Clinician overrides of rule defaults that were in effect when this report was generated. */
+  paramOverrides?: Record<string, Record<string, number>>;
 }
 
 /* ---------------- Program ---------------- */
@@ -158,6 +162,8 @@ export interface Program {
   /** Strength-training experience tier used to scale volume and plyometric exposure. */
   trainingTier?: string;
   rulesUsed: string[];
+  /** Clinician overrides of rule defaults that were in effect when this program was generated. */
+  paramOverrides?: Record<string, Record<string, number>>;
 }
 
 /* ---------------- Logging & progression ---------------- */

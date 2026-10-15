@@ -1,3 +1,4 @@
+import type { Params } from "./params";
 import type { EngineReport, Program, Rule } from "./types";
 
 /** Contract every sport module implements. The core never imports a specific sport. */
@@ -7,7 +8,7 @@ export interface SportModule<Assessment = any, ProgramOpts = any> {
   rules: Rule[];
   priorityKeys(): Array<{ key: string; label: string }>;
   computeMetrics(assessment: Assessment): Record<string, number | string | null>;
-  interpret(assessment: Assessment): EngineReport;
+  interpret(assessment: Assessment, params?: Params): EngineReport;
   generateProgram(assessment: Assessment, report: EngineReport, opts: ProgramOpts): Program;
 }
 

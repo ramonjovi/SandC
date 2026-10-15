@@ -34,6 +34,10 @@ With no `DATABASE_URL`, the server uses embedded Postgres (PGlite, stored in `pa
 
 Add a PostgreSQL service, then set `DATABASE_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` (10+ characters; creates the first admin when no users exist; rotate it after first sign-in). Build: `npm install && npm run build`. Start: `npm start`. The server runs migrations on boot and serves the built client.
 
+## Editable rule defaults
+
+Clinicians can change the numeric defaults of rules (DSI bands, plyometric contact caps, progression percentages, pace fractions and so on) on the **Rules** page. Each value has a validated range (for source-backed rules, the range the source supports), every change requires a written reason, and every change and reset is recorded in the audit log and the **Change history** tab. Changes apply to new interpretations, newly generated programs and future athlete logging; programs already generated keep their values, and each report and program records which overrides were in effect. Engine tests check that every editable value is actually read by the engine.
+
 ## Safety and honesty
 
 - Every rule is classified **source-verified / proposed default / needs verification**; see the in-app **Rules** page and `docs/rule-classification.md`.
@@ -42,4 +46,4 @@ Add a PostgreSQL service, then set `DATABASE_URL`, `ADMIN_EMAIL` and `ADMIN_PASS
 
 ## Not yet built
 
-MFA / email password reset, per-clinician caseloads, taper planning, running-plan (non-gym) generation, rule-default editing UI (defaults are editable per prescription today, not globally), additional sport modules.
+MFA / email password reset, per-clinician caseloads, taper planning, running-plan (non-gym) generation, additional sport modules.

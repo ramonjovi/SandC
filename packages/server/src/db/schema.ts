@@ -1,4 +1,4 @@
-import { bigserial, boolean, integer, jsonb, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
+import { bigserial, boolean, integer, jsonb, pgTable, primaryKey, real, text, timestamp } from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
@@ -115,3 +115,12 @@ export const invites = pgTable("invites", {
   usedAt: timestamp("used_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
+
+/** Clinician overrides of rule default values. A row exists only while the value differs from the built-in default. */
+export const ruleOverrides = pgTable("rule_overrides", {
+  ruleId: text("rule_id").notNull(),
+  key: text("key").notNull(),
+  value: real("value").notNull(),
+  updatedBy: text("updated_by").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.ruleId, t.key] })]);

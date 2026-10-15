@@ -17,6 +17,7 @@ export const runningModule: SportModule<RunnerAssessment, RunnerProgramOpts> = {
 export * from "./types";
 export * from "./vdot";
 export * from "./tier";
+export * from "./params";
 export * from "./interpret";
 export * from "./program";
 export * from "./exercises";

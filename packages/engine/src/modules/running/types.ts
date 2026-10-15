@@ -84,4 +84,6 @@ export interface RunnerAssessment {
 
 export interface RunnerProgramOpts {
   startDate?: string | null;
+  /** Rule parameters (clinician overrides applied). Defaults are used when omitted. */
+  params?: import("../../core/params").Params;
 }

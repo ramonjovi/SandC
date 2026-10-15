@@ -2,6 +2,8 @@ import type { EngineReport, Finding, Priority, SafetyFlag, SiteRestriction, Stra
 import { epley1RM, round1, round2 } from "../../core/util";
 import { SITE_EXCLUSIONS } from "./exercises";
 import type { RunnerAssessment } from "./types";
+import type { Params } from "../../core/params";
+import { defaultParams } from "./params";
 import { trainingTier } from "./tier";
 import { breakMultiplier, fmtPace, fmtTime, paceZones, predictTimeSec, vdotFromRace } from "./vdot";
 
@@ -59,7 +61,7 @@ export function computeMetrics(a: RunnerAssessment): Metrics {
   return m;
 }
 
-export function interpretRunner(a: RunnerAssessment): EngineReport {
+export function interpretRunner(a: RunnerAssessment, params: Params = defaultParams): EngineReport {
   const m = computeMetrics(a);
   const { health: hs, biomechanics: b, history: h, physical: ph, profile: pr } = a;
   const findings: Finding[] = [];
@@ -99,7 +101,7 @@ export function interpretRunner(a: RunnerAssessment): EngineReport {
 
   /* ---- baseline performance ---- */
   if (m.vdot != null) {
-    const z = paceZones(m.vdot as number);
+    const z = paceZones(m.vdot as number, params);
     used.add("running.vdot.formula"); used.add("running.vdot.paces");
     findings.push({
       id: "vdot", domain: "Running performance", severity: "info",
@@ -124,7 +126,10 @@ export function interpretRunner(a: RunnerAssessment): EngineReport {
 
   /* ---- strength / power ---- */
   const male = pr.sex === "male";
-  const deficitRel = male ? 1.2 : 1.0;
+  const deficitRel = params.get("running.strength.squat-ratio", male ? "deficitMale" : "deficitFemale");
+  const dsiLo = params.get("running.dsi", "strengthDeficitBelow"), dsiHi = params.get("running.dsi", "powerDeficitAbove");
+  const sebtFlag = params.get("running.symmetry", "sebtCm"), calfFlag = params.get("running.symmetry", "calfPct");
+  const switchKmh = params.get("running.strategy.speed-tilt", "switchSpeedKmh");
   const squatRel = m.squatRel as number | null;
   const dsi = m.dsi as number | null;
   if (m.squat1RM == null) missing.push("Squat test not entered: loads cannot be calculated (program will carry blank loads to establish in week 1).");
@@ -140,23 +145,23 @@ export function interpretRunner(a: RunnerAssessment): EngineReport {
   }
   let dsiState: "strength" | "power" | "balanced" | null = null;
   if (dsi != null) {
-    dsiState = dsi < 0.6 ? "strength" : dsi > 0.8 ? "power" : "balanced";
-    findings.push({ id: "dsi", domain: "Physical capacity", severity: dsiState === "balanced" ? "info" : "priority", text: `Dynamic Strength Index ${dsi} (${dsiState === "strength" ? "below 0.60: maximal-strength deficit pattern" : dsiState === "power" ? "above 0.80: ballistic/power deficit pattern" : "0.60-0.80: balanced"}).`, data: { dsi }, ruleIds: ["running.dsi"] });
+    dsiState = dsi < dsiLo ? "strength" : dsi > dsiHi ? "power" : "balanced";
+    findings.push({ id: "dsi", domain: "Physical capacity", severity: dsiState === "balanced" ? "info" : "priority", text: `Dynamic Strength Index ${dsi} (${dsiState === "strength" ? `below ${dsiLo}: maximal-strength deficit pattern` : dsiState === "power" ? `above ${dsiHi}: ballistic/power deficit pattern` : `${dsiLo}-${dsiHi}: balanced`}).`, data: { dsi }, ruleIds: ["running.dsi"] });
     used.add("running.dsi");
-    if (dsiState === "strength") addPri("max_strength", 95, `DSI ${dsi} < 0.60 suggests force output is limited by maximal strength.`, ["running.dsi", "running.strength.high-load"]);
-    if (dsiState === "power") addPri("power_rfd", 95, `DSI ${dsi} > 0.80 suggests strength is available but not expressed quickly.`, ["running.dsi", "running.strength.plyometric"]);
+    if (dsiState === "strength") addPri("max_strength", 95, `DSI ${dsi} < ${dsiLo} suggests force output is limited by maximal strength.`, ["running.dsi", "running.strength.high-load"]);
+    if (dsiState === "power") addPri("power_rfd", 95, `DSI ${dsi} > ${dsiHi} suggests strength is available but not expressed quickly.`, ["running.dsi", "running.strength.plyometric"]);
   } else missing.push("CMJ and IMTP peak force not both entered: DSI unavailable, so strength-vs-power emphasis relies on squat ratio and running speed.");
 
   // Calf-soleus: universal software default
   used.add("running.program.soleus");
-  const calfLow = m.calfRaiseAsymPct != null && (m.calfRaiseAsymPct as number) > 10;
-  addPri("calf_soleus", calfLow ? 70 : 30, calfLow ? `Calf raise asymmetry ${m.calfRaiseAsymPct}% (default flag >10%).` : "Default for all distance runners: heavy soleus loading (software default; calf/Achilles load is high in stance).", ["running.program.soleus"]);
+  const calfLow = m.calfRaiseAsymPct != null && (m.calfRaiseAsymPct as number) > calfFlag;
+  addPri("calf_soleus", calfLow ? 70 : 30, calfLow ? `Calf raise asymmetry ${m.calfRaiseAsymPct}% (default flag >${calfFlag}%).` : "Default for all distance runners: heavy soleus loading (software default; calf/Achilles load is high in stance).", ["running.program.soleus"]);
 
   // Symmetry
   const sebt = m.sebtAsymmetryCm as number | null;
-  const asym = (sebt != null && sebt > 4) || calfLow;
+  const asym = (sebt != null && sebt > sebtFlag) || calfLow;
   if (sebt != null) {
-    findings.push({ id: "sebt", domain: "Movement", severity: sebt > 4 ? "attention" : "info", text: `SEBT/Y-Balance asymmetry ${sebt} cm (default flag >4 cm).`, data: { sebt }, ruleIds: ["running.symmetry"] });
+    findings.push({ id: "sebt", domain: "Movement", severity: sebt > sebtFlag ? "attention" : "info", text: `SEBT/Y-Balance asymmetry ${sebt} cm (default flag >${sebtFlag} cm).`, data: { sebt }, ruleIds: ["running.symmetry"] });
     used.add("running.symmetry");
   }
   if (m.calfRaiseAsymPct != null) {
@@ -226,8 +231,8 @@ export function interpretRunner(a: RunnerAssessment): EngineReport {
   } else if (!strengthDef && !powerDef && speed != null) {
     used.add("running.strategy.speed-tilt");
     rules.push("running.strategy.speed-tilt");
-    if (speed <= 12) { emphasis = "power"; why = `Target speed ${speed} km/h is <= 12 km/h, where plyometrics improved economy; strength lifts are retained. No measured deficit overrides this (speed tilt is a software default).`; rules.push("running.strength.plyometric"); }
-    else { emphasis = "strength"; why = `Target speed ${speed} km/h is above 12 km/h, where high-load benefit on economy was larger; plyometrics are retained at moderate volume (speed tilt is a software default).`; rules.push("running.strength.speed-direction"); }
+    if (speed <= switchKmh) { emphasis = "power"; why = `Target speed ${speed} km/h is <= ${switchKmh} km/h, where plyometrics improved economy; strength lifts are retained. No measured deficit overrides this (speed tilt is a software default).`; rules.push("running.strength.plyometric"); }
+    else { emphasis = "strength"; why = `Target speed ${speed} km/h is above ${switchKmh} km/h, where high-load benefit on economy was larger; plyometrics are retained at moderate volume (speed tilt is a software default).`; rules.push("running.strength.speed-direction"); }
   }
   rules.forEach((r) => used.add(r));
   used.add("running.strength.not-supported"); used.add("running.strength.metabolic-neutral");
@@ -241,6 +246,6 @@ export function interpretRunner(a: RunnerAssessment): EngineReport {
 
   return {
     moduleId: "running", engineVersion: ENGINE_VERSION, generatedAt: new Date().toISOString(),
-    metrics: m, findings, priorities, strategy, safetyFlags, restrictions, missingData: missing, rulesUsed: [...used],
+    metrics: m, findings, priorities, strategy, safetyFlags, restrictions, missingData: missing, rulesUsed: [...used], paramOverrides: params.overrides(),
   };
 }

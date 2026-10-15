@@ -1,4 +1,5 @@
 import type { ExerciseLog, NextTarget, PrescribedExercise, SessionLog } from "./types";
+import type { Params } from "./params";
 import { roundLoad } from "./util";
 
 /** Editable defaults for load progression (rules core.progression.*). */
@@ -28,6 +29,20 @@ export const DEFAULT_PROGRESSION: ProgressionConfig = {
   cmjDropFraction: 0.05,
   cmjVolumeCut: 0.5,
 };
+
+/** Build the progression config from rule parameters (clinician overrides applied). */
+export function progressionConfigFrom(p: Params): ProgressionConfig {
+  return {
+    incEasyPct: p.get("core.progression.load", "incEasyPct"),
+    incHardPct: p.get("core.progression.load", "incHardPct"),
+    rirEasy: p.get("core.progression.load", "rirEasy"),
+    reducePct: p.get("core.progression.load", "reducePct"),
+    missedRepsToReduce: p.get("core.progression.load", "missedRepsToReduce"),
+    painHold: p.get("core.progression.pain", "painHold"),
+    cmjDropFraction: p.get("core.progression.cmj-fatigue", "cmjDropFraction"),
+    cmjVolumeCut: p.get("core.progression.cmj-fatigue", "cmjVolumeCut"),
+  };
+}
 
 /**
  * Propose next-session targets for each prescribed exercise from what was actually done.
@@ -125,6 +140,9 @@ function nextForExercise(
     ruleIds: ["core.progression.load"],
   };
 }
+
+/** Weekly cap percentage with clinician overrides applied (rule core.load.weekly-cap, key capPct). */
+export const weeklyCapPct = (p: Params) => p.get("core.load.weekly-cap", "capPct");
 
 /** Weekly running-volume cap check (rule core.load.weekly-cap). */
 export function checkWeeklyVolume(prevKm: number, nextKm: number, capPct = 10) {

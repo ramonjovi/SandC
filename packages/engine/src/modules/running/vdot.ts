@@ -1,4 +1,6 @@
+import type { Params } from "../../core/params";
 import { round1 } from "../../core/util";
+import { defaultParams } from "./params";
 
 /** Daniels-Gilbert oxygen cost and %VO2max-sustained formulas (used by Daniels' VDOT tables). */
 function vo2AtVelocity(vMetersPerMin: number): number {
@@ -80,18 +82,20 @@ export interface PaceZones {
  * Seconds per 400 m between R and I pace (and I and T). Daniels: a 6-second rule, "a 7- or 8-second rule for runners in the
  * 50 or 40 VDOT categories". The VDOT bands below are a software reading of that sentence.
  */
-export function pacingGapSecPer400(vdot: number): number {
-  return vdot >= 55 ? 6 : vdot >= 45 ? 7 : 8;
+export function pacingGapSecPer400(vdot: number, p: Params = defaultParams): number {
+  const r = "running.vdot.six-second";
+  return vdot >= 55 ? p.get(r, "gapHigh") : vdot >= 45 ? p.get(r, "gapMid") : p.get(r, "gapLow");
 }
 
 /** Training pace zones (sec/km). Fractions are editable defaults (rule running.vdot.paces). */
-export function paceZones(vdot: number): PaceZones {
-  const I = paceSecPerKm(vdot, 0.975);
-  const rGap = pacingGapSecPer400(vdot) * 2.5; // per 400 m -> per km
+export function paceZones(vdot: number, p: Params = defaultParams): PaceZones {
+  const r = "running.vdot.paces";
+  const I = paceSecPerKm(vdot, p.get(r, "I"));
+  const rGap = pacingGapSecPer400(vdot, p) * 2.5; // per 400 m -> per km
   return {
-    E: paceSecPerKm(vdot, 0.66), // Daniels' average easy intensity (range 59-74% of VDOT)
-    M: paceSecPerKm(vdot, 0.8),
-    T: paceSecPerKm(vdot, 0.86),
+    E: paceSecPerKm(vdot, p.get(r, "E")), // Daniels' average easy intensity (range 59-74% of VDOT)
+    M: paceSecPerKm(vdot, p.get(r, "M")),
+    T: paceSecPerKm(vdot, p.get(r, "T")),
     I,
     R: I - rGap,
   };

@@ -2,6 +2,7 @@ import { registerModule, getModule } from "./core/module";
 import { CORE_RULES } from "./core/rules";
 import { runningModule } from "./modules/running";
 import type { Rule } from "./core/types";
+import { makeParams } from "./core/params";
 
 registerModule(runningModule);
 
@@ -9,6 +10,7 @@ export * from "./core/types";
 export * from "./core/util";
 export * from "./core/progression";
 export * from "./core/compare";
+export * from "./core/params";
 export * from "./core/roadmap";
 export * from "./core/module";
 export { CORE_RULES } from "./core/rules";
@@ -21,6 +23,11 @@ export function allRules(): Array<Rule & { module: string }> {
     ...CORE_RULES.map((r) => ({ ...r, module: "core" })),
     ...runningModule.rules.map((r) => ({ ...r, module: runningModule.id })),
   ];
+}
+
+/** Parameters for a sport module with the clinician overrides applied. */
+export function paramsFor(overrides?: import("./core/params").RuleOverrides) {
+  return makeParams(allRules(), overrides);
 }
 
 export { getModule };

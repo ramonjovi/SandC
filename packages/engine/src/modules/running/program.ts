@@ -4,7 +4,9 @@ import type {
 import { roundLoad } from "../../core/util";
 import { EXERCISES, SITE_EXCLUSIONS, type ExerciseDef, type LoadTag } from "./exercises";
 import { computeMetrics } from "./interpret";
-import { TIER_LIMITS, trainingTier, type TrainingTier } from "./tier";
+import type { Params } from "../../core/params";
+import { defaultParams } from "./params";
+import { tierLimits, trainingTier, type TrainingTier } from "./tier";
 import type { RunnerAssessment, RunnerProgramOpts } from "./types";
 
 interface WeekPlan {
@@ -54,11 +56,11 @@ const WARMUP = [
 ];
 
 /** Which side to give an extra set, from the calf-raise result (the weaker side). */
-function weakerSide(a: RunnerAssessment): "left" | "right" | null {
+function weakerSide(a: RunnerAssessment, calfPct: number): "left" | "right" | null {
   const l = a.physical.calfRaiseLeftReps, r = a.physical.calfRaiseRightReps;
   if (l == null || r == null || l === r) return null;
   const asym = (Math.abs(l - r) / Math.max(l, r)) * 100;
-  return asym > 10 ? (l < r ? "left" : "right") : null;
+  return asym > calfPct ? (l < r ? "left" : "right") : null;
 }
 
 const contactsOf = (list: PrescribedExercise[]) => list.filter((e) => e.unit === "contacts").reduce((n, e) => n + e.sets * e.reps, 0);
@@ -86,8 +88,12 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
   const squat1RM = metrics.squat1RM as number | null;
   const emphasis = report.strategy.emphasis;
   const tier: TrainingTier = trainingTier(a.history.strengthTrainingYears);
-  const limits = TIER_LIMITS[tier];
-  const side = weakerSide(a);
+  const params: Params = opts.params ?? defaultParams;
+  const limits = tierLimits(params)[tier];
+  const side = weakerSide(a, params.get("running.symmetry", "calfPct"));
+  const unloadCut = params.get("core.periodization.3to1", "unloadVolumeCut");
+  const taperCut = params.get("running.taper.window", "taperSetCut");
+  const raceCut = params.get("running.taper.window", "raceWeekSetCut");
   const assumptions: string[] = [
     `Strength-training tier: ${tier}${a.history.strengthTrainingYears == null ? " (experience not entered, treated conservatively)" : ""}. Sets are capped at ${limits.maxSets}; plyometric contacts at ${limits.contactCap} per session${limits.lowLevelPlyoOnly ? " (low-level plyometrics only)" : ""}.`,
     "Two gym sessions per week (A: squat pattern, B: hinge/robustness). Leave at least 6 hours between a gym session and a hard run, avoid hard gym and hard run on the same day, and follow a heavy gym session with an easy, low-volume run only.",
@@ -147,7 +153,7 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
     const isRaceWeek = raceWeek != null && w.week === raceWeek;
     const isTaperWeek = raceWeek != null && w.week === raceWeek - 1 && raceWeek >= 3;
     const taper = isRaceWeek || isTaperWeek;
-    const cut = isRaceWeek ? 0.5 : isTaperWeek ? 0.6 : w.unload ? 0.55 : 1;
+    const cut = isRaceWeek ? 1 - raceCut : isTaperWeek ? 1 - taperCut : w.unload ? 1 - unloadCut : 1;
     const baseSets = Math.min(w.sets, limits.maxSets);
     const sets = cut < 1 ? Math.max(2, Math.round(baseSets * cut)) : baseSets;
     const secSets = taper || w.unload ? 2 : 3;
@@ -231,14 +237,14 @@ export function generateRunnerProgram(a: RunnerAssessment, report: EngineReport,
     return { week: w.week, phase, label, isUnload: w.unload || taper, note, sessions };
   });
 
-  const { objectives, milestones } = buildObjectivesAndMilestones(a, report, metrics, duration, raceWeek, tier);
+  const { objectives, milestones } = buildObjectivesAndMilestones(a, report, metrics, duration, raceWeek, tier, params.get("running.gait.cadence", "cadenceIncreasePct"));
   return {
     moduleId: "running", generatedAt: new Date().toISOString(), durationWeeks: duration,
-    strategy: report.strategy, weeks, objectives, milestones, assumptions, restrictionsApplied, trainingTier: tier, rulesUsed: [...rulesUsed],
+    strategy: report.strategy, weeks, objectives, milestones, assumptions, restrictionsApplied, trainingTier: tier, rulesUsed: [...rulesUsed], paramOverrides: params.overrides(),
   };
 }
 
-function buildObjectivesAndMilestones(a: RunnerAssessment, report: EngineReport, m: ReturnType<typeof computeMetrics>, weeks: number, raceWeek: number | null, tier: TrainingTier) {
+function buildObjectivesAndMilestones(a: RunnerAssessment, report: EngineReport, m: ReturnType<typeof computeMetrics>, weeks: number, raceWeek: number | null, tier: TrainingTier, cadencePct: number) {
   const objectives: Objective[] = [];
   const num = (k: string) => (typeof m[k] === "number" ? (m[k] as number) : null);
   const add = (o: Objective) => objectives.push(o);
@@ -255,7 +261,7 @@ function buildObjectivesAndMilestones(a: RunnerAssessment, report: EngineReport,
   const sebt = num("sebtAsymmetryCm");
   if (sebt != null && sebt > 4) add({ id: "sebt", label: "SEBT asymmetry", metric: "sebtAsymmetryCm", unit: "cm", baseline: sebt, target: 4, lowerIsBetter: true, rationale: "Bring side-to-side difference to 4 cm or less (default flag).", status: "needs_verification" });
   const cad = num("cadenceSpm");
-  if (cad != null && report.priorities.some((p) => p.key === "gait_mechanics")) add({ id: "cadence", label: "Running cadence", metric: "cadenceSpm", unit: "spm", baseline: cad, target: Math.round(cad * 1.075), rationale: "+5-10% cadence trial for symptomatic overstriding (midpoint).", status: "proposed_default" });
+  if (cad != null && report.priorities.some((p) => p.key === "gait_mechanics")) add({ id: "cadence", label: "Running cadence", metric: "cadenceSpm", unit: "spm", baseline: cad, target: Math.round(cad * (1 + cadencePct / 100)), rationale: `+${cadencePct}% cadence trial for symptomatic overstriding (book range 5-10%).`, status: "proposed_default" });
   const pred = num("goalPredictedTimeSec");
   if (pred != null && a.goals.targetTimeSec) add({ id: "goal", label: `${a.goals.event} race goal`, metric: "goalPredictedTimeSec", unit: "s", baseline: pred, target: a.goals.targetTimeSec, lowerIsBetter: true, rationale: "Predicted time from current VDOT vs. athlete goal. Strength training supports economy; fitness gains come from the running plan.", status: "source_verified" });
 
