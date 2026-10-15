@@ -1,22 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { Activity, CalendarCheck, CheckCircle2, Dumbbell, Map as MapIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Activity, CalendarCheck, CheckCircle2, Dumbbell, Map as MapIcon, UserRound } from "lucide-react";
 import type { PrescribedExercise, ProgramSession } from "@tpc/engine";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Textarea } from "@/components/ui";
 import { Roadmap } from "@/components/Roadmap";
+import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { ChangePassword } from "./Account";
 import { cn } from "@/lib/utils";
 
-type View = "work" | "roadmap" | "week";
+type View = "work" | "roadmap" | "week" | "account";
 
-async function call(code: string, path: string, body?: unknown) {
-  const r = await fetch(`/api/athlete/${code}${path}`, { method: body ? "POST" : "GET", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error ?? "Request failed");
-  return j;
-}
+const call = (_code: string, path: string, body?: unknown) => api(`/me${path === "/me" ? "" : path}`, body ? { method: "POST", body } : {});
 
 export function AthleteApp() {
-  const { code = "" } = useParams();
+  const code = "";
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [me, setMe] = useState<any>(null);
   const [err, setErr] = useState("");
   const [view, setView] = useState<View>("work");
@@ -27,18 +27,20 @@ export function AthleteApp() {
   if (!me) return <div className="p-8 text-sm text-muted-foreground">Loading...</div>;
 
   const nav: Array<{ id: View; label: string; icon: typeof Dumbbell }> = [
-    { id: "work", label: "Workouts", icon: Dumbbell }, { id: "roadmap", label: "Roadmap", icon: MapIcon }, { id: "week", label: "Weekly log", icon: CalendarCheck },
+    { id: "work", label: "Workouts", icon: Dumbbell }, { id: "roadmap", label: "Roadmap", icon: MapIcon }, { id: "week", label: "Weekly log", icon: CalendarCheck }, { id: "account", label: "Account", icon: UserRound },
   ];
   return (
     <div className="mx-auto min-h-screen max-w-2xl pb-24">
       <header className="flex items-center gap-2 border-b bg-card px-4 py-3">
         <Activity className="h-5 w-5 text-primary" /><span className="font-semibold">TPC Performance</span>
         <span className="ml-auto text-sm text-muted-foreground">{me.name}</span>
+        <button className="text-sm text-muted-foreground cursor-pointer" onClick={async () => { await logout(); navigate("/login"); }}>Sign out</button>
       </header>
       <main className="space-y-4 px-4 py-4">
         {view === "work" && <Workouts code={code} me={me} reload={load} />}
         {view === "roadmap" && <Roadmap roadmap={me.roadmap} />}
         {view === "week" && <WeeklyLog code={code} me={me} reload={load} />}
+        {view === "account" && <ChangePassword />}
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl">

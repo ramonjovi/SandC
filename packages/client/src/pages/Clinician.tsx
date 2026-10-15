@@ -2,45 +2,30 @@ import { useEffect, useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import { Activity, BookOpenCheck } from "lucide-react";
 import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Select, Badge } from "@/components/ui";
-import { api, ApiError, store, useApi } from "@/lib/api";
+import { api, ApiError, useApi } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { MetaContext, type Meta } from "@/lib/meta";
 import { fmtDate, parseTime } from "@/lib/utils";
 
 export function ClinicianLayout() {
+  const { user, logout } = useAuth();
+  const nav = useNavigate();
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [needToken, setNeedToken] = useState(false);
-  const [token, setToken] = useState("");
-  const [actor, setActor] = useState(store.get("tpc.actor", ""));
   const [err, setErr] = useState("");
-
-  const load = () => api<Meta>("/meta").then((m) => { setMeta(m); setNeedToken(false); }).catch((e: ApiError) => {
-    if (e.status === 401) setNeedToken(true); else setErr(e.message);
-  });
-  useEffect(() => { void load(); }, []);
-
-  if (needToken) {
-    return (
-      <div className="mx-auto mt-24 max-w-sm px-4">
-        <Card><CardHeader><CardTitle>Clinician sign-in</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <Label>Access token</Label>
-            <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} />
-            <Button onClick={() => { store.set("tpc.token", token); void load(); }}>Continue</Button>
-          </CardContent></Card>
-      </div>
-    );
-  }
+  useEffect(() => { api<Meta>("/meta").then(setMeta).catch((e: ApiError) => setErr(e.message)); }, []);
   if (!meta) return <div className="p-8 text-sm text-muted-foreground">{err || "Loading..."}</div>;
 
   return (
     <MetaContext.Provider value={meta}>
       <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
           <Link to="/" className="flex items-center gap-2 font-semibold"><Activity className="h-5 w-5 text-primary" /> TPC Performance OS</Link>
-          <Badge variant="outline" className="hidden sm:inline-flex">Clinician</Badge>
-          <div className="ml-auto flex items-center gap-2">
-            <Link to="/rules" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><BookOpenCheck className="h-4 w-4" /> Rules</Link>
-            <Input className="h-8 w-36 text-xs" placeholder="Your name" value={actor} onChange={(e) => { setActor(e.target.value); store.set("tpc.actor", e.target.value); }} aria-label="Clinician name" />
+          <Badge variant="outline" className="hidden sm:inline-flex">{user?.role}</Badge>
+          <div className="ml-auto flex items-center gap-3 text-sm">
+            <Link to="/rules" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"><BookOpenCheck className="h-4 w-4" /> Rules</Link>
+            {user?.role === "admin" && <Link to="/admin" className="text-muted-foreground hover:text-foreground">Team</Link>}
+            <Link to="/account" className="text-muted-foreground hover:text-foreground">{user?.name}</Link>
+            <button className="text-muted-foreground hover:text-foreground cursor-pointer" onClick={async () => { await logout(); nav("/login"); }}>Sign out</button>
           </div>
         </div>
       </header>
@@ -61,7 +46,6 @@ export function Home() {
     setErr("");
     try {
       const r = await api("/athletes", { method: "POST", body: {
-        clinician: store.get("tpc.actor", "clinician"),
         profile: { name: f.name, sex: f.sex, age: Number(f.age), bodyMassKg: Number(f.mass), heightCm: null },
         goals: { event: f.event, targetDistanceM: Number(f.dist), targetTimeSec: parseTime(f.time), raceDate: f.date || null, narrative: f.narrative },
       } });

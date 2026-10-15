@@ -79,11 +79,11 @@ export function parseAssessment(input: unknown): running.RunnerAssessment {
 export const CreateAthleteSchema = z.object({
   profile: AssessmentSchema.shape.profile,
   goals: AssessmentSchema.shape.goals,
-  clinician: z.string().default("clinician"),
+  clinician: z.string().optional(),
 });
 
 export const PtSchema = z.object({
-  clinician: z.string().min(1),
+  clinician: z.string().optional(),
   priorityKeys: z.array(z.string()),
   strategy: z.enum(["high_load", "plyometric", "combined"]),
   reasoning: z.string().default(""),
@@ -91,7 +91,7 @@ export const PtSchema = z.object({
 });
 
 export const ApproveSchema = z.object({
-  clinician: z.string().min(1),
+  clinician: z.string().optional(),
   screeningReviewed: z.literal(true, { errorMap: () => ({ message: "Screening must be reviewed and acknowledged before approval." }) }),
   clearanceNote: z.string().optional(),
 });

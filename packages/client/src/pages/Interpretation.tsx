@@ -3,7 +3,7 @@ import { AlertTriangle, Bot, UserRound } from "lucide-react";
 import { STRATEGY_LABEL, type EngineReport } from "@tpc/engine";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Label, Select, Textarea } from "@/components/ui";
 import { RuleBadge, RuleBadges, StatusBadge } from "@/components/RuleBadge";
-import { api, store } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useMeta } from "@/lib/meta";
 import { cn, formatTime } from "@/lib/utils";
 
@@ -135,7 +135,7 @@ function PtPanel({ assessment, priorities, onSaved }: { assessment: any; priorit
   async function save() {
     setMsg("");
     try {
-      await api(`/assessments/${assessment.id}/pt-interpretation`, { method: "PUT", body: { clinician: store.get("tpc.actor", "") || "clinician", priorityKeys: keys, strategy, reasoning, concerns } });
+      await api(`/assessments/${assessment.id}/pt-interpretation`, { method: "PUT", body: { priorityKeys: keys, strategy, reasoning, concerns } });
       onSaved();
     } catch (e) { setMsg((e as Error).message); }
   }

@@ -3,7 +3,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { running, STRATEGY_LABEL, type EngineReport, type PrescribedExercise, type Program } from "@tpc/engine";
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Select, Textarea } from "@/components/ui";
 import { RuleBadges } from "@/components/RuleBadge";
-import { api, store } from "@/lib/api";
+import { api } from "@/lib/api";
 import { cn, fmtDateTime } from "@/lib/utils";
 
 export function ProgramEditor({ athleteId, assessment, programRow, onChanged }: { athleteId: string; assessment: any; programRow: any | null; onChanged: () => void }) {
@@ -140,7 +140,7 @@ function ApprovePanel({ programRow, flags, highStakes, dirty, onDone }: { progra
   async function approve() {
     setErr("");
     try {
-      await api(`/programs/${programRow.id}/approve`, { method: "POST", body: { clinician: store.get("tpc.actor", "") || "clinician", screeningReviewed: true, clearanceNote: note || undefined } });
+      await api(`/programs/${programRow.id}/approve`, { method: "POST", body: { screeningReviewed: true, clearanceNote: note || undefined } });
       onDone();
     } catch (e) { setErr((e as Error).message); }
   }

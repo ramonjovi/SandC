@@ -9,13 +9,19 @@ export const store = {
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
 };
 
+/** Session cookie is HttpOnly and sent automatically; the custom header is the CSRF defence the server requires. */
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
-  const headers: Record<string, string> = { "content-type": "application/json", "x-actor": store.get("tpc.actor", "clinician") };
-  const token = store.get("tpc.token");
-  if (token) headers["x-clinician-token"] = token;
-  const r = await fetch(`/api${path}`, { method: opts.method ?? "GET", headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
+  const r = await fetch(`/api${path}`, {
+    method: opts.method ?? "GET",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json", "x-requested-with": "tpc" },
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new ApiError(r.status, j.error ?? `Request failed (${r.status})`);
+  if (!r.ok) {
+    if (r.status === 401 && !path.startsWith("/auth/")) window.dispatchEvent(new Event("tpc:unauthorized"));
+    throw new ApiError(r.status, j.error ?? `Request failed (${r.status})`);
+  }
   return j as T;
 }
 

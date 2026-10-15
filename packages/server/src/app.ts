@@ -1,4 +1,4 @@
-import { randomUUID, randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -11,10 +11,14 @@ import {
 } from "@tpc/engine";
 import { schema, type Db } from "./db";
 import {
+  AuthError, attachUser, endSession, hashPassword, makeLimiter, newToken, passwordProblem, requireCsrfHeader, requireRole, sha256,
+  startSession, verifyPassword,
+} from "./auth";
+import {
   ApproveSchema, AssessmentSchema, CreateAthleteSchema, PtSchema, SessionLogSchema, WeeklyLogSchema, parseAssessment,
 } from "./schemas";
 
-const { athletes, assessments, engineReports, ptInterpretations, programs, sessionLogs, weeklyLogs, auditLog } = schema;
+const { athletes, assessments, engineReports, ptInterpretations, programs, sessionLogs, weeklyLogs, auditLog, users, invites } = schema;
 
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -30,16 +34,12 @@ export function createApp(db: Db) {
   const app = express();
   app.use(express.json({ limit: "2mb" }));
 
-  const actorOf = (req: Request) => String(req.header("x-actor") ?? "clinician").slice(0, 80);
+  const actorOf = (req: Request) => req.user?.name ?? "system";
   const audit = (actor: string, action: string, entity: string, entityId: string, athleteId: string | null, detail?: unknown) =>
     db.insert(auditLog).values({ actor, action, entity, entityId, athleteId, detail: detail ?? null });
 
-  /* ---------- clinician auth (shared token; replace with real auth before real patient data) ---------- */
-  const requireClinician = (req: Request, _res: Response, next: NextFunction) => {
-    const token = process.env.CLINICIAN_TOKEN;
-    if (token && req.header("x-clinician-token") !== token) return next(new HttpError(401, "Clinician token required."));
-    next();
-  };
+  app.use("/api", attachUser(db), requireCsrfHeader);
+  const loginLimiter = makeLimiter(8, 15 * 60_000);
 
   /* ---------- loaders ---------- */
   const getAthlete = async (athleteId: string) => {
@@ -111,13 +111,114 @@ export function createApp(db: Db) {
   /* ---------- meta ---------- */
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+  /* ---------- auth ---------- */
+  const publicUser = (u: { id: string; email: string; name: string; role: string; athleteId: string | null }) => ({ id: u.id, email: u.email, name: u.name, role: u.role, athleteId: u.athleteId });
+
+  app.post("/api/auth/login", h(async (req, res) => {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const password = String(req.body?.password ?? "");
+    const key = `${req.ip}|${email}`;
+    if (!loginLimiter.take(key)) throw new HttpError(429, "Too many attempts. Try again in a few minutes.");
+    const [u] = await db.select().from(users).where(eq(users.email, email));
+    // Always run a hash comparison so timing does not reveal whether the account exists.
+    const ok = await verifyPassword(password, u?.passwordHash ?? "scrypt$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAA==");
+    if (!u || !ok || u.disabled) {
+      await audit(email || "unknown", "login-failed", "user", u?.id ?? "-", u?.athleteId ?? null);
+      throw new HttpError(401, "Incorrect email or password.");
+    }
+    loginLimiter.reset(key);
+    await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, u.id));
+    await startSession(db, req, res, u.id);
+    await audit(u.name, "login", "user", u.id, u.athleteId);
+    res.json(publicUser(u));
+  }));
+  app.post("/api/auth/logout", h(async (req, res) => { await endSession(db, req, res); res.json({ ok: true }); }));
+  app.get("/api/auth/me", (req, res) => res.json(req.user ? publicUser(req.user) : null));
+  app.post("/api/auth/change-password", requireRole("admin", "clinician", "athlete"), h(async (req, res) => {
+    const [u] = await db.select().from(users).where(eq(users.id, req.user!.id));
+    if (!(await verifyPassword(String(req.body?.current ?? ""), u.passwordHash))) throw new HttpError(401, "Current password is incorrect.");
+    const next = String(req.body?.next ?? "");
+    const problem = passwordProblem(next);
+    if (problem) throw new HttpError(400, problem);
+    await db.update(users).set({ passwordHash: await hashPassword(next) }).where(eq(users.id, u.id));
+    // Sign out all other sessions, then start a fresh one for this device.
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, u.id));
+    await startSession(db, req, res, u.id);
+    await audit(u.name, "change-password", "user", u.id, u.athleteId);
+    res.json({ ok: true });
+  }));
+
+  /* ---------- athlete invites (public side) ---------- */
+  const findInvite = async (token: string) => {
+    const [inv] = await db.select().from(invites).where(eq(invites.tokenHash, sha256(token)));
+    if (!inv || inv.usedAt || inv.expiresAt < new Date()) throw new HttpError(410, "This invite link is invalid or has expired. Ask your clinician for a new one.");
+    return inv;
+  };
+  app.get("/api/invites/:token", h(async (req, res) => {
+    const inv = await findInvite(param(req, "token"));
+    res.json({ athleteName: (await getAthlete(inv.athleteId)).name });
+  }));
+  app.post("/api/invites/:token/accept", h(async (req, res) => {
+    const inv = await findInvite(param(req, "token"));
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const password = String(req.body?.password ?? "");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
+    const problem = passwordProblem(password);
+    if (problem) throw new HttpError(400, problem);
+    const [taken] = await db.select().from(users).where(eq(users.email, email));
+    if (taken) throw new HttpError(409, "An account with this email already exists.");
+    const athlete = await getAthlete(inv.athleteId);
+    const userId = id();
+    await db.insert(users).values({ id: userId, email, name: athlete.name, role: "athlete", passwordHash: await hashPassword(password), athleteId: athlete.id });
+    await db.update(invites).set({ usedAt: new Date() }).where(eq(invites.tokenHash, inv.tokenHash));
+    await audit(athlete.name, "accept-invite", "user", userId, athlete.id);
+    await startSession(db, req, res, userId);
+    res.status(201).json({ id: userId, email, name: athlete.name, role: "athlete", athleteId: athlete.id });
+  }));
+
+  /* ---------- admin ---------- */
+  const admin = express.Router();
+  admin.use(requireRole("admin"));
+  admin.get("/users", h(async (_req, res) => {
+    const rows = await db.select().from(users);
+    res.json(rows.map((u) => ({ ...publicUser(u), disabled: u.disabled, lastLoginAt: u.lastLoginAt })));
+  }));
+  admin.post("/users", h(async (req, res) => {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const name = String(req.body?.name ?? "").trim();
+    const role = req.body?.role === "admin" ? "admin" : "clinician";
+    const password = String(req.body?.password ?? "");
+    if (!name || !email.includes("@")) throw new HttpError(400, "Name and a valid email are required.");
+    const problem = passwordProblem(password);
+    if (problem) throw new HttpError(400, problem);
+    if ((await db.select().from(users).where(eq(users.email, email))).length) throw new HttpError(409, "Email already in use.");
+    const userId = id();
+    await db.insert(users).values({ id: userId, email, name, role, passwordHash: await hashPassword(password) });
+    await audit(actorOf(req), "create-user", "user", userId, null, { email, role });
+    res.status(201).json({ id: userId });
+  }));
+  admin.patch("/users/:id", h(async (req, res) => {
+    const uid = param(req, "id");
+    if (uid === req.user!.id) throw new HttpError(400, "You cannot change your own account here.");
+    const patch: Partial<typeof users.$inferInsert> = {};
+    if (typeof req.body?.disabled === "boolean") patch.disabled = req.body.disabled;
+    if (req.body?.password) {
+      const problem = passwordProblem(String(req.body.password));
+      if (problem) throw new HttpError(400, problem);
+      patch.passwordHash = await hashPassword(String(req.body.password));
+    }
+    await db.update(users).set(patch).where(eq(users.id, uid));
+    if (patch.disabled || patch.passwordHash) await db.delete(schema.sessions).where(eq(schema.sessions.userId, uid));
+    await audit(actorOf(req), "update-user", "user", uid, null, { disabled: patch.disabled, passwordReset: Boolean(patch.passwordHash) });
+    res.json({ ok: true });
+  }));
+  app.use("/api/admin", admin);
+
   const clinician = express.Router();
-  clinician.use(requireClinician);
-  app.use("/api", (req, res, next) => (req.path.startsWith("/athlete/") || req.path === "/health" ? next() : clinician(req, res, next)));
+  clinician.use(requireRole("clinician", "admin"));
 
   clinician.get("/meta", (_req, res) => {
     res.json({
-      authRequired: Boolean(process.env.CLINICIAN_TOKEN),
       rules: allRules(),
       modules: listModules().map((m) => ({ id: m.id, name: m.name, priorities: m.priorityKeys() })),
     });
@@ -137,13 +238,12 @@ export function createApp(db: Db) {
   clinician.post("/athletes", h(async (req, res) => {
     const body = CreateAthleteSchema.parse(req.body);
     const athleteId = id();
-    const accessCode = randomBytes(5).toString("hex");
-    await db.insert(athletes).values({ id: athleteId, name: body.profile.name, accessCode, moduleId: "running", isSynthetic: Boolean(req.body.isSynthetic) });
+    await db.insert(athletes).values({ id: athleteId, name: body.profile.name, moduleId: "running", isSynthetic: Boolean(req.body.isSynthetic) });
     const data = parseAssessment({ profile: body.profile, goals: body.goals });
     const assessmentId = id();
     await db.insert(assessments).values({ id: assessmentId, athleteId, kind: "baseline", data });
-    await audit(body.clinician, "create", "athlete", athleteId, athleteId, { name: body.profile.name });
-    res.status(201).json({ id: athleteId, accessCode, assessmentId });
+    await audit(actorOf(req), "create", "athlete", athleteId, athleteId, { name: body.profile.name });
+    res.status(201).json({ id: athleteId, assessmentId });
   }));
 
   clinician.get("/athletes/:id", h(async (req, res) => {
@@ -160,7 +260,17 @@ export function createApp(db: Db) {
     }
     const logs = await db.select().from(sessionLogs).where(eq(sessionLogs.athleteId, athleteId)).orderBy(desc(sessionLogs.createdAt));
     const weekly = await db.select().from(weeklyLogs).where(eq(weeklyLogs.athleteId, athleteId)).orderBy(desc(weeklyLogs.weekStart));
-    res.json({ athlete, baselineId: baseline?.id ?? null, assessments: out, programs: progs, sessionLogs: logs, weeklyLogs: weekly });
+    const account = (await db.select().from(users).where(eq(users.athleteId, athleteId)))[0];
+    res.json({ account: account ? { email: account.email, lastLoginAt: account.lastLoginAt, disabled: account.disabled } : null, athlete, baselineId: baseline?.id ?? null, assessments: out, programs: progs, sessionLogs: logs, weeklyLogs: weekly });
+  }));
+
+  clinician.post("/athletes/:id/invite", h(async (req, res) => {
+    const athleteId = param(req, "id");
+    await getAthlete(athleteId);
+    const token = newToken();
+    await db.insert(invites).values({ tokenHash: sha256(token), athleteId, createdBy: actorOf(req), expiresAt: new Date(Date.now() + 7 * 86400_000) });
+    await audit(actorOf(req), "invite", "athlete", athleteId, athleteId);
+    res.status(201).json({ token, expiresInDays: 7 });
   }));
 
   clinician.get("/athletes/:id/roadmap", h(async (req, res) => res.json(await roadmapFor(param(req, "id")))));
@@ -212,7 +322,8 @@ export function createApp(db: Db) {
     const athlete = await getAthlete(a.athleteId);
     const body = PtSchema.parse(req.body);
     const rep = await latestReport(a.id);
-    const { clinician: who, ...ptData } = body;
+    const { clinician: _ignored, ...ptData } = body;
+    const who = actorOf(req);
     let comparison = null;
     if (rep) {
       const mod = getModule(athlete.moduleId);
@@ -266,9 +377,9 @@ export function createApp(db: Db) {
     for (const e of prior) if (e.id !== p.id) await db.update(programs).set({ status: "archived", updatedAt: new Date() }).where(eq(programs.id, e.id));
     await db.update(programs).set({
       status: "approved", screeningReviewed: true, clearanceNote: body.clearanceNote ?? null,
-      approvedBy: body.clinician, approvedAt: new Date(), updatedAt: new Date(),
+      approvedBy: actorOf(req), approvedAt: new Date(), updatedAt: new Date(),
     }).where(eq(programs.id, p.id));
-    await audit(body.clinician, "approve", "program", p.id, p.athleteId, { clearanceNote: body.clearanceNote ?? null, hasHighStakes });
+    await audit(actorOf(req), "approve", "program", p.id, p.athleteId, { clearanceNote: body.clearanceNote ?? null, hasHighStakes });
     res.json({ ok: true });
   }));
 
@@ -294,16 +405,17 @@ export function createApp(db: Db) {
   }));
 
   /* ---------- athlete interface ---------- */
-  const athleteByCode = async (code: string) => {
-    const [a] = await db.select().from(athletes).where(eq(athletes.accessCode, code));
-    if (!a) throw nf("Athlete link");
-    return a;
+  const me = express.Router();
+  me.use(requireRole("athlete"));
+  const myAthlete = async (req: Request) => {
+    if (!req.user?.athleteId) throw new AuthError(403, "No athlete record linked to this account.");
+    return getAthlete(req.user.athleteId);
   };
   const approvedFor = async (athleteId: string) =>
     (await db.select().from(programs).where(and(eq(programs.athleteId, athleteId), eq(programs.status, "approved"))))[0];
 
-  app.get("/api/athlete/:code/me", h(async (req, res) => {
-    const a = await athleteByCode(param(req, "code"));
+  me.get("/", h(async (req, res) => {
+    const a = await myAthlete(req);
     const prog = await approvedFor(a.id);
     const logs = prog ? await db.select().from(sessionLogs).where(eq(sessionLogs.programId, prog.id)).orderBy(desc(sessionLogs.createdAt)) : [];
     const weekly = await db.select().from(weeklyLogs).where(eq(weeklyLogs.athleteId, a.id)).orderBy(desc(weeklyLogs.weekStart));
@@ -317,8 +429,8 @@ export function createApp(db: Db) {
     });
   }));
 
-  app.post("/api/athlete/:code/session-logs", h(async (req, res) => {
-    const a = await athleteByCode(param(req, "code"));
+  me.post("/session-logs", h(async (req, res) => {
+    const a = await myAthlete(req);
     const prog = await approvedFor(a.id);
     if (!prog) throw new HttpError(409, "No approved program yet.");
     const body = SessionLogSchema.parse(req.body);
@@ -331,21 +443,24 @@ export function createApp(db: Db) {
     const proposals = proposeNextTargets(session.exercises as PrescribedExercise[], log, { cmjBaselineCm: cmjBase });
     const logId = id();
     await db.insert(sessionLogs).values({ id: logId, athleteId: a.id, programId: prog.id, week: body.week, day: body.day, data: log, proposals });
-    await audit("athlete", "log-session", "session_log", logId, a.id, { week: body.week, day: body.day });
+    await audit(a.name, "log-session", "session_log", logId, a.id, { week: body.week, day: body.day });
     res.status(201).json({ id: logId, proposals });
   }));
 
-  app.post("/api/athlete/:code/weekly-logs", h(async (req, res) => {
-    const a = await athleteByCode(param(req, "code"));
+  me.post("/weekly-logs", h(async (req, res) => {
+    const a = await myAthlete(req);
     const body = WeeklyLogSchema.parse(req.body);
     const prev = (await db.select().from(weeklyLogs).where(eq(weeklyLogs.athleteId, a.id)).orderBy(desc(weeklyLogs.weekStart)))
       .find((w) => w.weekStart < body.weekStart);
     const volumeFlag = prev ? checkWeeklyVolume(prev.runKm, body.runKm) : null;
     const logId = id();
     await db.insert(weeklyLogs).values({ id: logId, athleteId: a.id, weekStart: body.weekStart, runKm: body.runKm, painModifiedTraining: body.painModifiedTraining, notes: body.notes ?? null, volumeFlag });
-    await audit("athlete", "log-week", "weekly_log", logId, a.id, { ...body, volumeFlag });
+    await audit(a.name, "log-week", "weekly_log", logId, a.id, { ...body, volumeFlag });
     res.status(201).json({ id: logId, volumeFlag, painFlag: body.painModifiedTraining });
   }));
+
+  app.use("/api/me", me);
+  app.use("/api", clinician);
 
   /* ---------- static client (production) ---------- */
   const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../client/dist");
@@ -356,6 +471,7 @@ export function createApp(db: Db) {
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ZodError) return res.status(400).json({ error: err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
+    if (err instanceof AuthError) return res.status(err.status).json({ error: err.message });
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error(err);
     res.status(500).json({ error: "Internal error" });

@@ -19,18 +19,27 @@ npm run dev        # API on :3001, web on :5173 (proxied)
 npm test           # engine + API tests
 ```
 
-With no `DATABASE_URL`, the server uses embedded Postgres (PGlite, stored in `packages/server/.pglite`) and seeds two **synthetic** athletes. Athlete demo links: `/a/alex-demo-0001` (approved program, one logged session) and `/a/sam-demo-0002` (draft, screening flags, tibial restriction). Delete `.pglite` to reset.
+With no `DATABASE_URL`, the server uses embedded Postgres (PGlite, stored in `packages/server/.pglite`) and seeds **synthetic** data. Demo logins (password `demo-password-1`, dev only): `admin@tpc.demo`, `clinician@tpc.demo`, `alex@tpc.demo` (approved program, one logged session), `sam@tpc.demo` (draft, screening flags, tibial restriction). Delete `.pglite` to reset.
+
+## Authentication
+
+- Email + password (scrypt hashes), server-side sessions in the database, `HttpOnly` / `SameSite=Lax` / `Secure` (on HTTPS) cookie, 7-day expiry.
+- Roles: `admin` (manages team accounts), `clinician` (all athletes), `athlete` (only their own record, via `/api/me`).
+- Athletes join through a one-time, 7-day invite link a clinician generates on the case page. Links are stored hashed and cannot be reused.
+- CSRF: every non-GET request must carry `x-requested-with: tpc`. Login attempts are rate-limited (in-memory, per instance). Changing a password signs out other devices.
+- All audit entries are attributed to the signed-in user, not a client-supplied name.
+- Clinicians currently see every athlete (single-clinic model). Per-clinician caseloads, MFA and password reset by email are not built.
 
 ## Deploy (Railway)
 
-Add a PostgreSQL service, then set `DATABASE_URL` (and `CLINICIAN_TOKEN`). Build: `npm install && npm run build`. Start: `npm start`. The server runs migrations on boot and serves the built client.
+Add a PostgreSQL service, then set `DATABASE_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` (10+ characters; creates the first admin when no users exist; rotate it after first sign-in). Build: `npm install && npm run build`. Start: `npm start`. The server runs migrations on boot and serves the built client.
 
 ## Safety and honesty
 
 - Every rule is classified **source-verified / proposed default / needs verification**; see the in-app **Rules** page and `docs/rule-classification.md`.
 - The engine **never** classifies REDs risk or grants medical clearance. It surfaces screening flags; approval requires a clinician acknowledgement, and a written review note when high-stakes flags exist.
-- Athlete links and the shared `CLINICIAN_TOKEN` are placeholders. **Add real authentication before storing real patient data.**
+- Authentication is implemented (see above), but this is not yet a reviewed, compliant system: before storing real patient data, review hosting, backups, encryption, consent and applicable health-privacy law.
 
 ## Not yet built
 
-Authentication/roles, GitHub Actions CI, taper planning, running-plan (non-gym) generation, rule-default editing UI (defaults are editable per prescription today, not globally), additional sport modules.
+MFA / email password reset, per-clinician caseloads, taper planning, running-plan (non-gym) generation, rule-default editing UI (defaults are editable per prescription today, not globally), additional sport modules.

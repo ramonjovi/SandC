@@ -6,8 +6,6 @@ export const athletes = pgTable("athletes", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   moduleId: text("module_id").notNull().default("running"),
-  /** Secret link code for the athlete interface. Replace with real auth before real patient data. */
-  accessCode: text("access_code").notNull().unique(),
   isSynthetic: boolean("is_synthetic").notNull().default(false),
   createdAt: createdAt(),
 });
@@ -86,4 +84,34 @@ export const auditLog = pgTable("audit_log", {
   entityId: text("entity_id").notNull(),
   athleteId: text("athlete_id"),
   detail: jsonb("detail"),
+});
+
+export const users = pgTable("users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  role: text("role").notNull(), // admin | clinician | athlete
+  passwordHash: text("password_hash").notNull(),
+  /** Set for role=athlete: the single athlete record this user may access. */
+  athleteId: text("athlete_id").references(() => athletes.id),
+  disabled: boolean("disabled").notNull().default(false),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+/** Server-side sessions. Only a SHA-256 hash of the cookie token is stored. */
+export const sessions = pgTable("sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+});
+
+export const invites = pgTable("invites", {
+  tokenHash: text("token_hash").primaryKey(),
+  athleteId: text("athlete_id").notNull().references(() => athletes.id),
+  createdBy: text("created_by").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: createdAt(),
 });

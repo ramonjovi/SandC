@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Copy, ExternalLink } from "lucide-react";
+import { Copy, UserPlus } from "lucide-react";
 import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Select, Tabs } from "@/components/ui";
 import { Roadmap } from "@/components/Roadmap";
 import { api, useApi } from "@/lib/api";
@@ -24,7 +24,11 @@ export function CasePage() {
   const assessment = data.assessments.find((a: any) => a.id === aid) ?? data.assessments[0];
   const forAssessment = data.programs.filter((p: any) => p.assessmentId === assessment.id);
   const programRow = forAssessment.find((p: any) => p.status === "approved") ?? forAssessment.find((p: any) => p.status === "draft") ?? null;
-  const link = `${location.origin}/a/${data.athlete.accessCode}`;
+  const [invite, setInvite] = useState("");
+  async function makeInvite() {
+    const r = await api(`/athletes/${id}/invite`, { method: "POST", body: {} });
+    setInvite(`${location.origin}/invite/${r.token}`);
+  }
 
   async function reassess() {
     const r = await api(`/athletes/${id}/reassessments`, { method: "POST", body: {} });
@@ -43,10 +47,19 @@ export function CasePage() {
             {data.assessments.map((a: any, i: number) => <option key={a.id} value={a.id}>{a.kind === "baseline" ? "Baseline" : `Reassessment ${i}`} · {fmtDateTime(a.createdAt)}</option>)}
           </Select>
           <Button size="sm" variant="outline" onClick={reassess}>New reassessment</Button>
-          <Button size="sm" variant="secondary" onClick={() => navigator.clipboard?.writeText(link)} title={link}><Copy className="h-3.5 w-3.5" /> Athlete link</Button>
-          <a href={link} target="_blank" rel="noreferrer"><Button size="sm" variant="ghost"><ExternalLink className="h-3.5 w-3.5" /></Button></a>
+          {data.account
+            ? <Badge variant="ok" title={`Last login ${data.account.lastLoginAt ? fmtDateTime(data.account.lastLoginAt) : "never"}`}>Athlete account: {data.account.email}</Badge>
+            : <Button size="sm" variant="secondary" onClick={makeInvite}><UserPlus className="h-3.5 w-3.5" /> Invite athlete</Button>}
         </div>
       </div>
+
+      {invite && (
+        <Alert tone="ok" className="space-y-1">
+          <div>Send this one-time link to the athlete (valid 7 days). It is shown only now.</div>
+          <div className="flex items-center gap-2"><code className="break-all text-xs">{invite}</code>
+            <Button size="sm" variant="outline" onClick={() => navigator.clipboard?.writeText(invite)}><Copy className="h-3.5 w-3.5" /> Copy</Button></div>
+        </Alert>
+      )}
 
       <Tabs<Tab> value={tab} onChange={setTab} tabs={[
         { id: "assess", label: "1 · Assess" }, { id: "interpret", label: "2 · Interpret" }, { id: "program", label: "3 · Program" },
