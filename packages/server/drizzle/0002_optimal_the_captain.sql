@@ -1,0 +1,1 @@
+ALTER TABLE "session_logs" ADD COLUMN "logged_by" text DEFAULT 'athlete' NOT NULL;

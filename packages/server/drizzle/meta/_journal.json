@@ -15,6 +15,13 @@
       "when": 1792034159112,
       "tag": "0001_wise_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792035375581,
+      "tag": "0002_optimal_the_captain",
+      "breakpoints": true
     }
   ]
 }

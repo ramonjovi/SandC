@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { SYNTHETIC_ALEX, SYNTHETIC_SAM, type Program } from "@tpc/engine";
+import { SYNTHETIC_ALEX, SYNTHETIC_SAM, type Program, running } from "@tpc/engine";
 import { createApp } from "../src/app";
 import { hashPassword } from "../src/auth";
 import { openDb, schema, type DbHandle } from "../src/db";
@@ -236,6 +236,59 @@ describe("field tests without a force plate", () => {
     expect(d.body.assessments[0].data.physical.rsiFlightMs).toBe(150);
     const meta = await pt.get("/api/meta").expect(200);
     expect(meta.body.modules[0].protocols.length).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe("clinician logging on the athlete's behalf, and trend data", () => {
+  let a: Awaited<ReturnType<typeof newAthlete>>;
+  let program: Program;
+  const exLog = (week: number, day: number) => {
+    const sess = program.weeks[week - 1].sessions[day - 1];
+    return sess.exercises.map((e) => ({ prescribedId: e.id, exerciseId: e.exerciseId, sets: Array.from({ length: e.sets }, () => ({ reps: e.reps, loadKg: e.loadKg })), rirFinal: e.rir, pain: null }));
+  };
+
+  it("clinician logs a back-dated session; it is attributed and shows in the session grid", async () => {
+    a = await newAthlete(SYNTHETIC_ALEX);
+    const p = await pt.post(`/api/assessments/${a.assessmentId}/program`).expect(201);
+    await pt.post(`/api/programs/${p.body.id}/approve`).send({ screeningReviewed: true }).expect(200);
+    program = (await pt.get(`/api/athletes/${a.id}`)).body.programs[0].data;
+    const r = await pt.post(`/api/athletes/${a.id}/session-logs`).send({ week: 1, day: 1, performedAt: "2026-10-05T09:00:00.000Z", exercises: exLog(1, 1) }).expect(201);
+    expect(r.body.proposals.length).toBeGreaterThan(0);
+    const rm = (await pt.get(`/api/athletes/${a.id}/roadmap`)).body;
+    const cell = rm.sessionGrid.find((c: any) => c.week === 1 && c.day === 1);
+    expect(cell.done).toBe(true);
+    expect(cell.loggedBy).toBe("Dr. PT");
+    expect(cell.at).toBe("2026-10-05T09:00:00.000Z");
+    expect(rm.sessionGrid.find((c: any) => c.week === 1 && c.day === 2).done).toBe(false);
+    expect(rm.sessionGrid).toHaveLength(16);
+  });
+  it("rejects a duplicate for the same session, and allows re-logging after a delete (audited)", async () => {
+    await pt.post(`/api/athletes/${a.id}/session-logs`).send({ week: 1, day: 1, exercises: exLog(1, 1) }).expect(409);
+    const logs = (await pt.get(`/api/athletes/${a.id}`)).body.sessionLogs;
+    await pt.delete(`/api/session-logs/${logs[0].id}`).expect(200);
+    await pt.post(`/api/athletes/${a.id}/session-logs`).send({ week: 1, day: 1, exercises: exLog(1, 1) }).expect(201);
+    const audit = (await pt.get(`/api/athletes/${a.id}/audit`)).body;
+    expect(audit.some((e: any) => e.action === "delete-session-log")).toBe(true);
+    expect(audit.some((e: any) => e.action === "log-session-for-athlete")).toBe(true);
+  });
+  it("athletes cannot use the clinician logging or delete endpoints", async () => {
+    const { agent } = await athleteSession(a.id, "logger@x.test");
+    await agent.post(`/api/athletes/${a.id}/session-logs`).send({ week: 2, day: 1, exercises: [] }).expect(403);
+    const logs = (await pt.get(`/api/athletes/${a.id}`)).body.sessionLogs;
+    await agent.delete(`/api/session-logs/${logs[0].id}`).expect(403);
+  });
+  it("clinician weekly log flags a >10% jump; series expose trend data", async () => {
+    await pt.post(`/api/athletes/${a.id}/weekly-logs`).send({ weekStart: "2026-09-28", runKm: 50 }).expect(201);
+    const r = await pt.post(`/api/athletes/${a.id}/weekly-logs`).send({ weekStart: "2026-10-05", runKm: 60 }).expect(201);
+    expect(r.body.volumeFlag.ok).toBe(false);
+    await pt.post(`/api/athletes/${a.id}/session-logs`).send({ week: 2, day: 1, performedAt: "2026-10-12T09:00:00.000Z", exercises: exLog(2, 1) }).expect(201);
+    const { series } = (await pt.get(`/api/athletes/${a.id}/roadmap`)).body;
+    expect(series.weeklyKm.map((w: any) => w.runKm)).toEqual([50, 60]);
+    expect(series.assessments[0].metrics.squat1RM).toBeCloseTo(running.estimate1RM(100, 5), 1);
+    const sq = series.sessionLoads.filter((x: any) => x.exerciseId === "back_squat");
+    expect(sq.length).toBe(2);
+    expect(sq[0].at < sq[1].at).toBe(true);
+    expect(sq[0].e1rm).toBeGreaterThan(0);
   });
 });
 

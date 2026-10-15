@@ -17,7 +17,7 @@ export function ClinicianLayout() {
 
   return (
     <MetaContext.Provider value={meta}>
-      <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur print:hidden">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
           <Link to="/" className="flex items-center gap-2 font-semibold"><Activity className="h-5 w-5 text-primary" /> TPC Performance OS</Link>
           <Badge variant="outline" className="hidden sm:inline-flex">{user?.role}</Badge>

@@ -43,3 +43,15 @@
 * { border-color: var(--border); }
 body { background: var(--background); color: var(--foreground); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 input, select, textarea { font: inherit; }
+
+/* Chart tokens (validated palette: blue + orange, fixed order) */
+.viz {
+  --viz-surface: #fcfcfb; --viz-ink: #0b0b0b; --viz-ink2: #52514e; --viz-muted: #898781;
+  --viz-grid: #e1e0d9; --viz-axis: #c3c2b7; --viz-s1: #2a78d6; --viz-s2: #eb6834;
+}
+@media print {
+  @page { margin: 14mm; }
+  body { background: white !important; }
+  .viz { --viz-surface: #ffffff; }
+  figure, section, table { break-inside: avoid; }
+}

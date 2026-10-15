@@ -106,6 +106,27 @@ export function createApp(db: Db) {
       ...m, status: m.week < currentWeek ? "done" : m.week === currentWeek ? "current" : "upcoming",
     }));
     const weekly = await db.select().from(weeklyLogs).where(eq(weeklyLogs.athleteId, athleteId)).orderBy(asc(weeklyLogs.weekStart));
+
+    // Trend data for charts and PDF reports.
+    const when = (l: (typeof logs)[number]) => String((l.data as SessionLog).performedAt ?? l.createdAt.toISOString());
+    const sessionLoads: Array<{ at: string; week: number; day: number; exerciseId: string; topLoadKg: number; e1rm: number | null }> = [];
+    for (const l of [...logs].sort((x, y) => when(x).localeCompare(when(y)))) {
+      for (const e of (l.data as SessionLog).exercises) {
+        if (e.exerciseId !== "back_squat" && e.exerciseId !== "trap_bar_deadlift") continue;
+        const best = e.sets.filter((x) => x.loadKg && x.reps > 0).sort((p, q) => (q.loadKg ?? 0) - (p.loadKg ?? 0))[0];
+        if (!best) continue;
+        sessionLoads.push({ at: when(l), week: l.week, day: l.day, exerciseId: e.exerciseId, topLoadKg: best.loadKg!, e1rm: e.exerciseId === "back_squat" && best.reps <= 10 ? Math.round(running.estimate1RM(best.loadKg!, best.reps) * 10) / 10 : null });
+      }
+    }
+    const series = {
+      assessments: all.map((a) => ({ at: a.createdAt.toISOString(), kind: a.kind, metrics: mod.computeMetrics(a.data as any) })),
+      sessionLoads,
+      weeklyKm: weekly.map((w) => ({ weekStart: w.weekStart, runKm: w.runKm, volumeFlag: w.volumeFlag, painModifiedTraining: w.painModifiedTraining })),
+    };
+    const sessionGrid = (program?.weeks ?? []).flatMap((w) => w.sessions.map((s) => {
+      const log = logs.find((l) => l.week === w.week && l.day === s.day);
+      return { week: w.week, day: s.day, name: s.name, phase: w.phase, done: Boolean(log), logId: log?.id ?? null, loggedBy: log?.loggedBy ?? null, at: log ? when(log) : null };
+    }));
     return {
       athleteName: athlete.name,
       goals: (baseline.data as any).goals,
@@ -113,6 +134,8 @@ export function createApp(db: Db) {
       objectives, milestones, currentWeek,
       adherence: { completed: done.size, planned: totalSessions, pct: totalSessions ? Math.round((done.size / totalSessions) * 100) : 0 },
       weeklyLogs: weekly,
+      series, sessionGrid,
+      programName: program ? `${program.durationWeeks}-week S&C program` : null,
       programStatus: prog?.status ?? null,
     };
   }
@@ -458,6 +481,65 @@ export function createApp(db: Db) {
     res.json({ ok: true, changes });
   }));
 
+  /* ---------- session and weekly logging (athlete or clinician on their behalf) ---------- */
+  async function recordSession(athleteId: string, raw: unknown, loggedBy: string, actor: string, rejectDuplicate: boolean) {
+    const prog = await approvedFor(athleteId);
+    if (!prog) throw new HttpError(409, "No approved program yet.");
+    const body = SessionLogSchema.parse(raw);
+    const program = prog.data as Program;
+    const session = program.weeks.find((w) => w.week === body.week)?.sessions.find((s) => s.day === body.day);
+    if (!session) throw new HttpError(400, "Unknown session.");
+    if (rejectDuplicate) {
+      const existing = await db.select().from(sessionLogs).where(and(eq(sessionLogs.programId, prog.id), eq(sessionLogs.week, body.week), eq(sessionLogs.day, body.day)));
+      if (existing.length) throw new HttpError(409, "That session is already logged. Delete the existing log first if it needs correcting.");
+    }
+    const log: SessionLog = { ...body, performedAt: body.performedAt ?? new Date().toISOString(), exercises: body.exercises };
+    const all = await assessmentsFor(athleteId);
+    const cmjBase = (all[0]?.data as any)?.physical?.cmjHeightCm ?? null;
+    const proposals = proposeNextTargets(session.exercises as PrescribedExercise[], log, { cmjBaselineCm: cmjBase, config: progressionConfigFrom(await loadParams()) });
+    const logId = id();
+    await db.insert(sessionLogs).values({ id: logId, athleteId, programId: prog.id, week: body.week, day: body.day, data: log, proposals, loggedBy });
+    await audit(actor, loggedBy === "athlete" ? "log-session" : "log-session-for-athlete", "session_log", logId, athleteId, { week: body.week, day: body.day, loggedBy });
+    return { id: logId, proposals };
+  }
+  async function recordWeek(athleteId: string, raw: unknown, actor: string, loggedBy: string) {
+    const body = WeeklyLogSchema.parse(raw);
+    const prev = (await db.select().from(weeklyLogs).where(eq(weeklyLogs.athleteId, athleteId)).orderBy(desc(weeklyLogs.weekStart)))
+      .find((w) => w.weekStart < body.weekStart);
+    const volumeFlag = prev ? checkWeeklyVolume(prev.runKm, body.runKm, weeklyCapPct(await loadParams())) : null;
+    const logId = id();
+    await db.insert(weeklyLogs).values({ id: logId, athleteId, weekStart: body.weekStart, runKm: body.runKm, painModifiedTraining: body.painModifiedTraining, notes: body.notes ?? null, volumeFlag });
+    await audit(actor, "log-week", "weekly_log", logId, athleteId, { ...body, volumeFlag, loggedBy });
+    return { id: logId, volumeFlag, painFlag: body.painModifiedTraining };
+  }
+  const approvedFor = async (athleteId: string) =>
+    (await db.select().from(programs).where(and(eq(programs.athleteId, athleteId), eq(programs.status, "approved"))))[0];
+
+  clinician.post("/athletes/:id/session-logs", h(async (req, res) => {
+    const athleteId = param(req, "id");
+    await getAthlete(athleteId);
+    res.status(201).json(await recordSession(athleteId, req.body, actorOf(req), actorOf(req), true));
+  }));
+  clinician.post("/athletes/:id/weekly-logs", h(async (req, res) => {
+    const athleteId = param(req, "id");
+    await getAthlete(athleteId);
+    res.status(201).json(await recordWeek(athleteId, req.body, actorOf(req), actorOf(req)));
+  }));
+  clinician.delete("/session-logs/:id", h(async (req, res) => {
+    const [log] = await db.select().from(sessionLogs).where(eq(sessionLogs.id, param(req, "id")));
+    if (!log) throw nf("Session log");
+    await db.delete(sessionLogs).where(eq(sessionLogs.id, log.id));
+    await audit(actorOf(req), "delete-session-log", "session_log", log.id, log.athleteId, { week: log.week, day: log.day, loggedBy: log.loggedBy, data: log.data });
+    res.json({ ok: true });
+  }));
+  clinician.delete("/weekly-logs/:id", h(async (req, res) => {
+    const [w] = await db.select().from(weeklyLogs).where(eq(weeklyLogs.id, param(req, "id")));
+    if (!w) throw nf("Weekly log");
+    await db.delete(weeklyLogs).where(eq(weeklyLogs.id, w.id));
+    await audit(actorOf(req), "delete-weekly-log", "weekly_log", w.id, w.athleteId, { weekStart: w.weekStart, runKm: w.runKm });
+    res.json({ ok: true });
+  }));
+
   /* ---------- athlete interface ---------- */
   const me = express.Router();
   me.use(requireRole("athlete"));
@@ -465,9 +547,6 @@ export function createApp(db: Db) {
     if (!req.user?.athleteId) throw new AuthError(403, "No athlete record linked to this account.");
     return getAthlete(req.user.athleteId);
   };
-  const approvedFor = async (athleteId: string) =>
-    (await db.select().from(programs).where(and(eq(programs.athleteId, athleteId), eq(programs.status, "approved"))))[0];
-
   me.get("/", h(async (req, res) => {
     const a = await myAthlete(req);
     const prog = await approvedFor(a.id);
@@ -477,7 +556,7 @@ export function createApp(db: Db) {
     res.json({
       name: a.name,
       program: program ? { id: prog!.id, version: prog!.version, durationWeeks: program.durationWeeks, weeks: program.weeks, approvedAt: prog!.approvedAt } : null,
-      sessionLogs: logs.map((l) => ({ id: l.id, week: l.week, day: l.day, createdAt: l.createdAt, data: l.data, proposals: l.proposals })),
+      sessionLogs: logs.map((l) => ({ id: l.id, week: l.week, day: l.day, createdAt: l.createdAt, loggedBy: l.loggedBy, data: l.data, proposals: l.proposals })),
       weeklyLogs: weekly,
       roadmap: prog ? await roadmapFor(a.id) : null,
     });
@@ -485,32 +564,12 @@ export function createApp(db: Db) {
 
   me.post("/session-logs", h(async (req, res) => {
     const a = await myAthlete(req);
-    const prog = await approvedFor(a.id);
-    if (!prog) throw new HttpError(409, "No approved program yet.");
-    const body = SessionLogSchema.parse(req.body);
-    const program = prog.data as Program;
-    const session = program.weeks.find((w) => w.week === body.week)?.sessions.find((s) => s.day === body.day);
-    if (!session) throw new HttpError(400, "Unknown session.");
-    const log: SessionLog = { ...body, performedAt: body.performedAt ?? new Date().toISOString(), exercises: body.exercises };
-    const all = await assessmentsFor(a.id);
-    const cmjBase = (all[0]?.data as any)?.physical?.cmjHeightCm ?? null;
-    const proposals = proposeNextTargets(session.exercises as PrescribedExercise[], log, { cmjBaselineCm: cmjBase, config: progressionConfigFrom(await loadParams()) });
-    const logId = id();
-    await db.insert(sessionLogs).values({ id: logId, athleteId: a.id, programId: prog.id, week: body.week, day: body.day, data: log, proposals });
-    await audit(a.name, "log-session", "session_log", logId, a.id, { week: body.week, day: body.day });
-    res.status(201).json({ id: logId, proposals });
+    res.status(201).json(await recordSession(a.id, req.body, "athlete", a.name, false));
   }));
 
   me.post("/weekly-logs", h(async (req, res) => {
     const a = await myAthlete(req);
-    const body = WeeklyLogSchema.parse(req.body);
-    const prev = (await db.select().from(weeklyLogs).where(eq(weeklyLogs.athleteId, a.id)).orderBy(desc(weeklyLogs.weekStart)))
-      .find((w) => w.weekStart < body.weekStart);
-    const volumeFlag = prev ? checkWeeklyVolume(prev.runKm, body.runKm, weeklyCapPct(await loadParams())) : null;
-    const logId = id();
-    await db.insert(weeklyLogs).values({ id: logId, athleteId: a.id, weekStart: body.weekStart, runKm: body.runKm, painModifiedTraining: body.painModifiedTraining, notes: body.notes ?? null, volumeFlag });
-    await audit(a.name, "log-week", "weekly_log", logId, a.id, { ...body, volumeFlag });
-    res.status(201).json({ id: logId, volumeFlag, painFlag: body.painModifiedTraining });
+    res.status(201).json(await recordWeek(a.id, req.body, a.name, "athlete"));
   }));
 
   app.use("/api/me", me);

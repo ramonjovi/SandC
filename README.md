@@ -30,6 +30,12 @@ With no `DATABASE_URL`, the server uses embedded Postgres (PGlite, stored in `pa
 - All audit entries are attributed to the signed-in user, not a client-supplied name.
 - Clinicians currently see every athlete (single-clinic model). Per-clinician caseloads, MFA and password reset by email are not built.
 
+## Progress, logging and PDF reports
+
+- **Clinician logging:** on the Progress tab, a session grid shows every planned session. If an athlete forgot to log, click "Log Session A/B", pick the date it was done and enter the sets. Weekly running volume can be entered the same way. Clinician-entered logs are marked "entered by <name>"; a wrong log can be deleted (kept in the audit history).
+- **Trend charts:** per-goal charts (baseline, each retest, target), heaviest set per session, and weekly running volume. Every chart has a table view and a hover tooltip.
+- **PDF reports:** Progress tab → "Create PDF report for athlete" → choose Baseline or Progress update, tick the sections, add notes, then Print and choose "Save as PDF" (turn off headers and footers). Screening answers and engine reasoning are never included.
+
 ## Deploy (Railway)
 
 Add a PostgreSQL service, then set `DATABASE_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` (10+ characters; creates the first admin when no users exist; rotate it after first sign-in). Build: `npm install && npm run build`. Start: `npm start`. The server runs migrations on boot and serves the built client.

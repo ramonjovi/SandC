@@ -61,6 +61,8 @@ export const sessionLogs = pgTable("session_logs", {
   data: jsonb("data").notNull(),
   proposals: jsonb("proposals").notNull(),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
+  /** "athlete" when the athlete logged it, otherwise the clinician who entered it on their behalf. */
+  loggedBy: text("logged_by").notNull().default("athlete"),
   createdAt: createdAt(),
 });
 
