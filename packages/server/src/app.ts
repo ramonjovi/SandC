@@ -13,6 +13,7 @@ import {
 import { schema, type Db } from "./db";
 import { purgeAthlete } from "./lifecycle";
 import { consentSummary, registerConsent, requireActiveConsent } from "./consent";
+import { registerImages } from "./images";
 import {
   AuthError, attachUser, endSession, hashPassword, makeLimiter, newToken, passwordProblem, requireCsrfHeader, requireRole, sha256,
   startSession, verifyPassword,
@@ -35,7 +36,7 @@ const param = (req: Request, k: string) => String(req.params[k]);
 
 export function createApp(db: Db) {
   const app = express();
-  app.use(express.json({ limit: "2mb" }));
+  app.use(express.json({ limit: "6mb" })); // pictures from the video arrive as base64 (shrunk by the browser first)
 
   const actorOf = (req: Request) => req.user?.name ?? "system";
   const audit = (actor: string, action: string, entity: string, entityId: string, athleteId: string | null, detail?: unknown) =>
@@ -623,6 +624,7 @@ export function createApp(db: Db) {
   }));
 
   registerConsent({ db, app, clinician, me, HttpError, h, param, actorOf, audit, getAthlete });
+  registerImages({ db, clinician, HttpError, h, param, actorOf, audit });
   app.use("/api/me", me);
   app.use("/api", clinician);
 

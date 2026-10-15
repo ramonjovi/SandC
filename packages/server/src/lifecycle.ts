@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { schema, type Db } from "./db";
 
-const { athletes, assessments, engineReports, ptInterpretations, programs, sessionLogs, weeklyLogs, auditLog, users, invites, consents } = schema;
+const { athletes, assessments, engineReports, ptInterpretations, programs, sessionLogs, weeklyLogs, auditLog, users, invites, consents, analysisImages } = schema;
 
 /**
  * Erases an athlete and every record that belongs to them (irreversible). Audit rows keep who/what/when but lose their content
@@ -16,6 +16,7 @@ export async function purgeAthlete(db: Db, athleteId: string) {
     await tx.delete(programs).where(eq(programs.athleteId, athleteId));
     await tx.delete(ptInterpretations).where(eq(ptInterpretations.athleteId, athleteId));
     await tx.delete(engineReports).where(eq(engineReports.athleteId, athleteId));
+    await tx.delete(analysisImages).where(eq(analysisImages.athleteId, athleteId));
     await tx.delete(assessments).where(eq(assessments.athleteId, athleteId));
     await tx.delete(invites).where(eq(invites.athleteId, athleteId));
     await tx.delete(consents).where(eq(consents.athleteId, athleteId));

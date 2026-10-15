@@ -167,3 +167,19 @@ export const consents = pgTable("consents", {
   withdrawnReason: text("withdrawn_reason"),
   createdAt: createdAt(),
 });
+
+/** Still frames taken from the running/test video, with the clinician's measurement and discussion. Stored as base64 text. */
+export const analysisImages = pgTable("analysis_images", {
+  id: text("id").primaryKey(),
+  athleteId: text("athlete_id").notNull().references(() => athletes.id),
+  assessmentId: text("assessment_id").notNull().references(() => assessments.id),
+  phase: text("phase").notNull(),
+  caption: text("caption").notNull().default(""),
+  measure: text("measure").notNull().default(""),
+  discussion: text("discussion").notNull().default(""),
+  mime: text("mime").notNull(),
+  data: text("data").notNull(),
+  bytes: integer("bytes").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+});

@@ -31,7 +31,7 @@ To assess you, build and adjust your strength program, track your progress, and 
 Your clinician makes every decision. The TPC system is software that follows written rules and gives a second opinion on your test results. It does not use artificial intelligence services. It never clears you medically, and it does not replace a diagnosis. Your clinician reviews, can change or reject anything it suggests, and approves your program before you receive it. Changes to this form are reviewed and approved by a second clinician.
 
 ## Video
-Video of you running or testing is recorded on a clinic device only to assess your movement. [[What happens to videos and how long they are kept]]. You can decline video and still be assessed.
+Video of you running or testing is recorded on a clinic device only to assess your movement. Still pictures taken from the video may be saved in your record and, if you agree, printed in your report. [[What happens to videos and how long they are kept]]. You can decline video or pictures and still be assessed.
 
 ## Who can see it
 The TPC clinicians who treat you, and you, through your own login if you use it. We do not share it with anyone else unless you ask us to or the law requires it. [[Any referring doctor, coach or insurer you will share with, and only with the athlete's permission]].
@@ -58,6 +58,7 @@ export const DEFAULT_ITEMS: ConsentItem[] = [
   { id: "stop", text: "I understand I can stop any test or exercise at any time and should tell my clinician about any pain or health problem.", required: true },
   { id: "hosting", text: "I understand my information is stored on {{hosting}}.", required: true },
   { id: "video", text: "I agree to being recorded on video for movement assessment. (You can decline and still be assessed without video.)", required: false },
+  { id: "images", text: "I agree that still pictures taken from my running video may be saved in my record and shown in my report.", required: false },
   { id: "login", text: "I agree to receive my program and reports through the TPC athlete login.", required: false },
   { id: "deid", text: "I agree that my information, with my name and details removed, may be used to improve TPC's service.", required: false },
 ];

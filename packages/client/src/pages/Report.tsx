@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Printer } from "lucide-react";
-import { STRATEGY_LABEL, type Program } from "@tpc/engine";
+import { STRATEGY_LABEL, running, type Program } from "@tpc/engine";
 import { Alert, Button, Input, Label, Select, Textarea } from "@/components/ui";
 import { Trends } from "@/components/Trends";
 import { useApi } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, formatTime } from "@/lib/utils";
 
@@ -37,11 +38,16 @@ export function ReportPage() {
   const athlete = useApi<any>(`/athletes/${id}`);
   const roadmap = useApi<any>(`/athletes/${id}/roadmap`);
   const [kind, setKind] = useState<Kind>("progress");
-  const [inc, setInc] = useState({ results: true, objectives: true, charts: true, plan: true, log: true });
+  const [inc, setInc] = useState({ results: true, video: true, objectives: true, charts: true, plan: true, log: true });
   const [notes, setNotes] = useState("");
   const [next, setNext] = useState("");
   const [by, setBy] = useState(user?.name ?? "");
   const baseline = kind === "baseline";
+  const allA: any[] = athlete.data?.assessments ?? [];
+  const baseA = allA.find((x) => x.kind === "baseline");
+  const lastA = allA.length ? allA[allA.length - 1] : null;
+  const imgBase = useApi<any[]>(baseA ? `/assessments/${baseA.id}/images` : null);
+  const imgLast = useApi<any[]>(lastA && lastA.id !== baseA?.id ? `/assessments/${lastA.id}/images` : null);
 
   const program: Program | null = useMemo(() => {
     const ps = athlete.data?.programs ?? [];
@@ -77,7 +83,7 @@ export function ReportPage() {
             <Select value={kind} onChange={(e) => setKind(e.target.value as Kind)}><option value="baseline">Baseline (where we are now)</option><option value="progress">Progress update</option></Select></div>
           <div><Label>Prepared by</Label><Input value={by} onChange={(e) => setBy(e.target.value)} /></div>
           <div className="flex flex-wrap items-end gap-x-4 gap-y-1 text-sm">
-            {([["results", "Test results"], ["objectives", "Goals"], ["charts", "Trend charts"], ["plan", "The plan"], ["log", "Training log"]] as const).map(([k, l]) => (
+            {([["results", "Test results"], ["video", "Running analysis (video)"], ["objectives", "Goals"], ["charts", "Trend charts"], ["plan", "The plan"], ["log", "Training log"]] as const).map(([k, l]) => (
               <label key={k} className="flex items-center gap-1.5"><input type="checkbox" checked={inc[k]} onChange={(e) => setInc({ ...inc, [k]: e.target.checked })} />{l}</label>
             ))}
           </div>
@@ -125,6 +131,10 @@ export function ReportPage() {
           </section>
         )}
 
+        {inc.video && baseA && (
+          <RunningAnalysis baseA={baseA} lastA={lastA} baseline={baseline} hasRetest={hasRetest} imgBase={imgBase.data ?? []} imgLast={imgLast.data ?? []} />
+        )}
+
         {inc.objectives && rm.objectives.length > 0 && (
           <section className="break-inside-avoid">
             <h2 className="mb-1 text-base font-semibold">Your goals for this block</h2>
@@ -150,7 +160,7 @@ export function ReportPage() {
         {inc.plan && program && (
           <section>
             <h2 className="mb-1 text-base font-semibold">Your plan</h2>
-            <p className="text-sm">{STRATEGY_PLAIN[program.strategy.key] ?? STRATEGY_LABEL[program.strategy.key]} It runs for {program.durationWeeks} weeks, two gym sessions per week, with lighter "unload" weeks built in so your body can adapt.</p>
+            <p className="text-sm">{STRATEGY_PLAIN[program.strategy.key] ?? STRATEGY_LABEL[program.strategy.key]} It runs for {program.durationWeeks} weeks, {program.sessionsPerWeek === 1 ? "one gym session" : program.sessionsPerWeek === 3 ? "three gym sessions" : "two gym sessions"} per week, with lighter "unload" weeks built in so your body can adapt.</p>
             <table className="mt-2 w-full text-sm">
               <thead><tr className="border-b text-left" style={{ color: "var(--viz-ink2)" }}><th className="py-1 font-medium">Week</th><th className="font-medium">Phase</th><th className="font-medium">Focus</th></tr></thead>
               <tbody>{program.weeks.map((w) => <tr key={w.week} className="border-b last:border-0 break-inside-avoid"><td className="py-1">{w.week}</td><td>{w.phase}</td><td>{w.label}{w.isUnload ? " (lighter week)" : ""}</td></tr>)}</tbody>
@@ -178,5 +188,69 @@ export function ReportPage() {
         </footer>
       </article>
     </div>
+  );
+}
+
+const VIDEO_ROWS: Array<{ label: string; get: (a: any) => string | null }> = [
+  { label: "Foot strike", get: (a) => a.biomechanics?.footStrike ?? null },
+  { label: "Cadence", get: (a) => (a.biomechanics?.cadenceSpm != null ? `${a.biomechanics.cadenceSpm} steps/min` : null) },
+  { label: "Foot lands ahead of the pelvis (overstride)", get: (a) => (a.biomechanics?.overstride == null ? null : a.biomechanics.overstride ? "Yes" : "No") },
+  { label: "Peak knee bend in stance", get: (a) => (a.biomechanics?.peakKneeFlexionDeg != null ? `${a.biomechanics.peakKneeFlexionDeg}°` : null) },
+  { label: "Peak hip extension", get: (a) => (a.biomechanics?.peakHipExtensionDeg != null ? `${a.biomechanics.peakHipExtensionDeg}°` : null) },
+  { label: "Vertical bounce", get: (a) => a.biomechanics?.verticalOscillation ?? null },
+  { label: "Pelvic drop", get: (a) => a.biomechanics?.pelvicDrop ?? null },
+  { label: "Knee window closes", get: (a) => (a.biomechanics?.kneeValgus == null ? null : a.biomechanics.kneeValgus ? "Yes" : "No") },
+  { label: "Feet cross the midline", get: (a) => (a.biomechanics?.crossover == null ? null : a.biomechanics.crossover ? "Yes" : "No") },
+  { label: "Heel whip over about 5°", get: (a) => (a.biomechanics?.heelWhip == null ? null : a.biomechanics.heelWhip ? "Yes" : "No") },
+];
+
+/** Running-video observations table plus the saved frames with what each might mean. Hidden if there is nothing to show. */
+function RunningAnalysis({ baseA, lastA, baseline, hasRetest, imgBase, imgLast }: { baseA: any; lastA: any; baseline: boolean; hasRetest: boolean; imgBase: any[]; imgLast: any[] }) {
+  const compare = !baseline && hasRetest && lastA && lastA.id !== baseA.id;
+  const latest = compare ? lastA : baseA;
+  const rows = VIDEO_ROWS.filter((r) => r.get(baseA.data) != null || r.get(latest.data) != null);
+  const shownImgs = compare ? [...imgBase, ...imgLast] : imgBase;
+  const phases = running.ANALYSIS_PHASES.filter((p) => shownImgs.some((i) => i.phase === p.id));
+  if (rows.length === 0 && phases.length === 0) return null;
+  const cap = (s: string | null) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "—");
+  return (
+    <section className="space-y-3">
+      <h2 className="text-base font-semibold">Your running analysis (from video)</h2>
+      {rows.length > 0 && (
+        <table className="w-full break-inside-avoid text-sm">
+          <thead><tr className="border-b text-left" style={{ color: "var(--viz-ink2)" }}><th className="py-1 font-medium">What we looked at</th><th className="font-medium">{compare ? "Baseline" : "Result"}</th>{compare && <th className="font-medium">Latest</th>}</tr></thead>
+          <tbody>{rows.map((r) => <tr key={r.label} className="border-b last:border-0"><td className="py-1">{r.label}</td><td>{cap(r.get(baseA.data))}</td>{compare && <td>{cap(r.get(latest.data))}</td>}</tr>)}</tbody>
+        </table>
+      )}
+      {phases.map((p) => {
+        const b = imgBase.filter((i) => i.phase === p.id);
+        const l = compare ? imgLast.filter((i) => i.phase === p.id) : [];
+        const text = [...l, ...b].find((i) => i.discussion)?.discussion;
+        const finding = p.finding(latest.data);
+        return (
+          <figure key={p.id} className="break-inside-avoid space-y-2 rounded-lg border p-3 text-sm">
+            <figcaption className="font-medium">{p.reportTitle}</figcaption>
+            <div className={cn("grid gap-3", compare && l.length && b.length ? "grid-cols-2" : "grid-cols-1")}>
+              {[...(compare && b.length ? [{ label: "Baseline", imgs: b }] : [{ label: "", imgs: b }]), ...(l.length ? [{ label: "Latest", imgs: l }] : [])]
+                .filter((g) => g.imgs.length)
+                .map((g) => (
+                  <div key={g.label || "one"} className="space-y-1">
+                    {g.label && <div className="text-xs font-medium" style={{ color: "var(--viz-ink2)" }}>{g.label}</div>}
+                    {g.imgs.map((i) => (
+                      <div key={i.id}>
+                        <img src={`/api/images/${i.id}/file`} alt={i.caption || p.label} className="max-h-72 w-auto rounded border" />
+                        {(i.caption || i.measure) && <div className="mt-0.5 text-xs" style={{ color: "var(--viz-ink2)" }}>{[i.caption, i.measure].filter(Boolean).join(" · ")}</div>}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+            </div>
+            {finding && <div><b>What we saw:</b> {finding}.</div>}
+            {text && <div><b>What this might mean:</b> {text}</div>}
+          </figure>
+        );
+      })}
+      <p className="text-xs" style={{ color: "var(--viz-ink2)" }}>These are observations from video, not a diagnosis. No measurement from running video has been shown to predict injury on its own, so each point is read together with your symptoms, strength tests and training.</p>
+    </section>
   );
 }

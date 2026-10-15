@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Select, Textarea } from "@/components/ui";
 import { HowTo } from "@/components/HowTo";
+import { AnalysisImages } from "@/components/AnalysisImages";
 import { FIELD_TIPS } from "@/lib/fieldTips";
 import { api } from "@/lib/api";
 import { formatTime, parseTime } from "@/lib/utils";
@@ -172,6 +173,7 @@ export function AssessmentForm({ assessment, onSaved, onInterpreted }: { assessm
           ? <details key={s.title} className="rounded-xl border bg-card"><summary className="cursor-pointer p-4 text-sm font-semibold sm:p-5">{s.title}</summary>{body}</details>
           : <Card key={s.title}>{body}</Card>;
       })}
+      <AnalysisImages assessment={assessment} data={data} />
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       <div className="sticky bottom-3 flex flex-wrap gap-2 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur">
         <Button variant="outline" disabled={busy} onClick={() => save(false)}>Save</Button>
