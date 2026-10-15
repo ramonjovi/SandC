@@ -20,7 +20,11 @@ export async function openDb(opts: { memory?: boolean } = {}): Promise<DbHandle>
     const { default: pg } = await import("pg");
     const { drizzle } = await import("drizzle-orm/node-postgres");
     const { migrate } = await import("drizzle-orm/node-postgres/migrator");
-    const pool = new pg.Pool({ connectionString: url, ssl: process.env.PGSSL === "disable" || /localhost|127\.0\.0\.1/.test(url) ? undefined : { rejectUnauthorized: false } });
+    // SSL: PGSSL=disable|require overrides; otherwise skip it for local/private-network hosts and use it elsewhere.
+    const mode = process.env.PGSSL;
+    const privateHost = /localhost|127\.0\.0\.1|\.railway\.internal/.test(url);
+    const ssl = mode === "disable" ? undefined : mode === "require" ? { rejectUnauthorized: false } : privateHost ? undefined : { rejectUnauthorized: false };
+    const pool = new pg.Pool({ connectionString: url, ssl });
     const db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder });
     return { db: db as unknown as Db, close: () => pool.end() };
