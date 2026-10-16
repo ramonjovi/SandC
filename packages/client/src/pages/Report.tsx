@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Printer } from "lucide-react";
 import { STRATEGY_LABEL, running, type Program } from "@tpc/engine";
@@ -68,7 +68,12 @@ export function ReportPage() {
   const [noteEdit, setNoteEdit] = useState<Record<string, string>>({});
   const [next, setNext] = useState("");
   const [by, setBy] = useState(user?.name ?? "");
+  const [storyText, setStoryText] = useState("");
+  const [steps, setSteps] = useState("");
+  const [advice, setAdvice] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const { modules } = useMeta();
+  const storeKey = `tpc-report-${id}`;
   const baseline = kind === "baseline";
   const allA: any[] = athlete.data?.assessments ?? [];
   const baseA = allA.find((x) => x.kind === "baseline");
@@ -80,6 +85,23 @@ export function ReportPage() {
     const ps = athlete.data?.programs ?? [];
     return (ps.find((p: any) => p.status === "approved") ?? ps.find((p: any) => p.status === "draft"))?.data ?? null;
   }, [athlete.data]);
+
+  // The report text is kept in this browser so a refresh does not lose it.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storeKey);
+      if (raw) {
+        const v = JSON.parse(raw);
+        setSummary(v.summary ?? ""); setGoing(v.going ?? ""); setFocus(v.focus ?? ""); setInterp(v.interp ?? ""); setNotes(v.notes ?? ""); setNext(v.next ?? "");
+        setStoryText(v.storyText ?? ""); setSteps(v.steps ?? ""); setAdvice(v.advice ?? null); setNoteEdit(v.noteEdit ?? {});
+      }
+    } catch { /* storage unavailable: carry on without it */ }
+    setLoaded(true);
+  }, [storeKey]);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem(storeKey, JSON.stringify({ summary, going, focus, interp, notes, next, storyText, steps, advice, noteEdit })); } catch { /* ignore */ }
+  }, [loaded, storeKey, summary, going, focus, interp, notes, next, storyText, steps, advice, noteEdit]);
 
   if (athlete.error || roadmap.error) return <Alert tone="danger">{(athlete.error ?? roadmap.error)!.message}</Alert>;
   if (!athlete.data || !roadmap.data) return <div className="text-sm text-muted-foreground">Loading...</div>;
@@ -108,18 +130,21 @@ export function ReportPage() {
   const priorities = prioKeys.map((k) => prioLabels[k]).filter(Boolean);
   const reason = (a?.visit?.reason ?? "").trim();
   const otherFindings = lines(sideData?.visit?.otherFindings ?? a?.visit?.otherFindings ?? "");
-  const showData = (inc.results && shown.length > 0) || videoRows;
-  const showInterp = videoFrames || interp.trim().length > 0 || sideRows.length > 0 || otherFindings.length > 0;
-  const showProgress = !baseline && (inc.charts || inc.log);
+  const stepList = steps.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.indexOf("|"); return i < 0 ? { say: l, proof: "" } : { say: l.slice(0, i).trim(), proof: l.slice(i + 1).trim() }; });
+  const hasStory = storyText.trim().length > 0 || stepList.length > 0;
+  const raceDate = a?.goals?.raceDate ? new Date(`${a.goals.raceDate}T00:00:00`) : null;
+  const weeksToRace = raceDate ? Math.max(0, Math.round((raceDate.getTime() - Date.now()) / (7 * 86400000))) : null;
+  // Describe the plan as it really is: if no jumping or hopping exercise is in it, say so instead of using the strategy wording.
+  const hasPlyo = !!program?.weeks.some((w) => w.sessions.some((ss) => ss.exercises.some((e) => e.category === "plyometric")));
+  const restWhile = a?.health?.painSite === "tibia" ? "your shin settles" : a?.health?.painSite && a.health.painSite !== "none" ? "you recover" : "your base builds";
+  const strategySentence = !program ? "" : hasPlyo
+    ? (STRATEGY_PLAIN[program.strategy.key] ?? STRATEGY_LABEL[program.strategy.key])
+    : `Your plan builds strength, hip control and calf capacity first. We are leaving out jumping and hopping for now while ${restWhile}, and may add light versions later.`;
+  const adviceDefault = defaultAdvice(a, sideData);
+  const adviceText = advice ?? adviceDefault;
+  const adviceList = lines(adviceText);
   const goalObj = rm.objectives.find((o: any) => o.id === "goal");
   const objRows = rm.objectives.filter((o: any) => !(baseline && o.id === "goal"));
-  const showPlan = (inc.plan && !!program) || (inc.objectives && rm.objectives.length > 0);
-  let partNo = 0;
-  const nData = showData ? ++partNo : 0;
-  const nInterp = showInterp ? ++partNo : 0;
-  const nPlan = showPlan ? ++partNo : 0;
-  const nProgress = showProgress ? ++partNo : 0;
-  const contents = [{ n: nData, t: "Your results" }, { n: nInterp, t: "What it means" }, { n: nPlan, t: "Your plan" }, { n: nProgress, t: "Progress" }].filter((c) => c.n);
   const tileKeys = ["vdot", "squat1RM", "cmjHeightCm", "calfRaiseAvg"];
   const tiles = tileKeys.map((k) => ROWS.find((r) => r.k === k)!).filter((r) => (compareMode ? cur[r.k] : base[r.k]) != null).map((r) => {
     const v = compareMode ? cur[r.k] : base[r.k];
@@ -159,6 +184,72 @@ export function ReportPage() {
       : `Your recent race points to a ${event} time of about ${formatTime(goalObj.baseline)} against a ${formatTime(goalObj.target)} goal. The gym plan supports this, and the gap is closed mainly by your running training.`
     : null;
 
+  // ---- "What it means": every finding, running analysis included, grouped with its result and meaning.
+  const allImgs = [...(imgLast.data ?? []), ...(imgBase.data ?? [])];
+  const disc: Record<string, string> = {};
+  for (const i of allImgs) if (i.discussion && !disc[i.phase]) disc[i.phase] = i.discussion;
+  const firstMeasure = (phase: string) => { const i = allImgs.find((x) => x.phase === phase && x.measure); return i ? plainMeasure(phase, i.measure) : null; };
+  const mean = (key: string, phase: string | null, auto: string) => noteEdit[key] ?? (phase ? disc[phase] : undefined) ?? auto;
+  const vItem = (label: string, short: string, phase: string | null, extra = ""): Finding | null => {
+    const r = vctx?.rows.find((x) => x.label === label);
+    if (!r || !vctx) return null;
+    const res = r.get(vctx.latest.data);
+    return res == null ? null : { label: short, result: `${cap(res)}${extra}`, meaning: mean(`v:${label}`, phase, r.note(vctx.latest.data)) };
+  };
+  const tItem = (k: string, phase: string | null = null, label?: string): Finding | null => {
+    const r = ROWS.find((x) => x.k === k);
+    if (!r || (base[r.k] == null && cur[r.k] == null)) return null;
+    return { label: label ?? r.label, result: fmt(r, compareMode ? cur[r.k] : base[r.k]), meaning: mean(`t:${k}`, phase, autoNote(k)) };
+  };
+  const sItem = (id: string, label: string, phase: string | null = null): Finding | null => {
+    const r = sideRows.find((x) => x.id === id);
+    return r ? { label, result: `Left ${r.lText} · Right ${r.rText}`, meaning: mean(`s:${id}`, phase, r.note) } : null;
+  };
+  const sideExtra = (id: string, what: string) => { const r = sideRows.find((x) => x.id === id); return r ? ` (${what ? `${what}: ` : ""}left ${r.lText}, right ${r.rText})` : ""; };
+  const shinM = firstMeasure("shin-angle");
+  const squatItem = tItem("squat1RM");
+  if (squatItem && base.squatRel != null) { squatItem.result = `${squatItem.result} · ${base.squatRel}× body weight`; squatItem.meaning = mean("t:squatRel", null, autoNote("squatRel") || autoNote("squat1RM")); }
+  const nordicDeg = (compareMode ? lastA?.data : a)?.physical?.nordicBreakAngleDeg;
+  const framed = (phase: string | null) => !!phase && !!vctx?.phases.some((x) => x.id === phase) && inc.video;
+  const unlessFramed = (phase: string | null, item: Finding | null) => (framed(phase) ? null : item);
+  const groups = ((inc.results || inc.video) ? [
+    { title: "How you run", items: [
+      unlessFramed("foot-strike", vItem("Foot strike", "Foot strike", "foot-strike")),
+      unlessFramed("overstride", vItem("Foot lands ahead of the pelvis (overstride)", "Overstride", "overstride")),
+      unlessFramed("shin-angle", shinM ? { label: "Shin angle at landing", result: shinM, meaning: mean("p:shin-angle", "shin-angle", "Where the shin points as the foot lands. Read with the overstride finding.") } : null),
+      unlessFramed("knee-flexion", vItem("Peak knee bend in stance", "Knee bend", "knee-flexion")),
+      unlessFramed("hip-extension", vItem("Peak hip extension", "Hip extension", "hip-extension")),
+      unlessFramed("vertical-oscillation", vItem("Vertical bounce", "Vertical bounce", "vertical-oscillation")),
+    ] },
+    { title: "Hips, feet and calves: left versus right", items: [
+      unlessFramed("pelvic-drop", vItem("Pelvic drop", "Pelvic drop", "pelvic-drop", sideExtra("pdrop", "standing on that leg")) ?? sItem("pdrop", "Pelvic drop", "pelvic-drop")),
+      unlessFramed("knee-window", vItem("Knee window closes", "Knee window", "knee-window")),
+      unlessFramed("crossover", vItem("Feet cross the midline", "Foot placement", "crossover")),
+      unlessFramed("heel-eversion", sItem("evers", "Heel tilt at mid-stance", "heel-eversion")),
+      unlessFramed("heel-whip", vItem("Heel whip over about 5°", "Heel whip", "heel-whip", sideExtra("whip", "")) ?? sItem("whip", "Heel whip", "heel-whip")),
+      sItem("hip", "Hip abduction strength"),
+      sItem("calf", "Calf endurance"),
+      tItem("sebtAsymmetryCm", null, "Balance reach difference"),
+    ] },
+    { title: "Fitness, strength and power", items: [
+      tItem("vdot"), tItem("goalPredictedTimeSec"), squatItem,
+      vItem("Cadence", "Cadence", null),
+      unlessFramed("cmj", tItem("cmjHeightCm", "cmj")), tItem("broadJumpM"), unlessFramed("pogo", tItem("rsi", "pogo")),
+      unlessFramed("nordic", typeof nordicDeg === "number" ? { label: "Nordic hamstring lowering", result: `${f1(nordicDeg)}° from the floor`, meaning: mean("p:nordic", "nordic", "How well the hamstrings control the lowering. Tracked against your own retest.") } : null),
+    ] },
+  ] : []).map((g) => ({ title: g.title, items: g.items.filter(Boolean) as Finding[] })).filter((g) => g.items.length > 0);
+
+  const showData = (inc.results && shown.length > 0) || videoRows || sideRows.length > 0 || otherFindings.length > 0;
+  const showInterp = interp.trim().length > 0 || hasStory || groups.length > 0 || videoFrames;
+  const showProgress = !baseline && (inc.charts || inc.log);
+  const showPlan = (inc.plan && !!program) || (inc.objectives && rm.objectives.length > 0);
+  let partNo = 0;
+  const nData = showData ? ++partNo : 0;
+  const nInterp = showInterp ? ++partNo : 0;
+  const nPlan = showPlan ? ++partNo : 0;
+  const nProgress = showProgress ? ++partNo : 0;
+  const contents = [{ n: nData, t: "Your results" }, { n: nInterp, t: "What it means" }, { n: nPlan, t: "Your plan" }, { n: nProgress, t: "Progress" }].filter((c) => c.n);
+
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <div className="space-y-3 rounded-xl border bg-card p-4 print:hidden">
@@ -184,12 +275,22 @@ export function ReportPage() {
           <div><Label>What is going well (one point per line)</Label><Textarea value={going} onChange={(e) => setGoing(e.target.value)} placeholder={"Efficient running form\nGood knee bend through the stride"} /></div>
           <div><Label>What we will work on (one point per line)</Label><Textarea value={focus} onChange={(e) => setFocus(e.target.value)} placeholder={"Hip control on one leg\nCalf strength and endurance"} /></div>
         </div>
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <b className="text-sm">How the evidence fits together (the story)</b>
+            <Button size="sm" variant="outline" onClick={() => { const d = draftStory(sideData ?? a ?? {}, reason); setStoryText(d.explanation); setSteps(d.steps.join("\n")); }}>Draft from the data</Button>
+            <span className="text-xs text-muted-foreground">Fills the two boxes below from the per-side numbers and findings you entered. Edit anything.</span>
+          </div>
+          <div><Label>Working explanation (1-2 sentences, printed in a highlighted box)</Label><Textarea value={storyText} onChange={(e) => setStoryText(e.target.value)} placeholder="Our working explanation: ..." /></div>
+          <div><Label>Steps, one per line: what is happening | the evidence</Label><Textarea rows={6} value={steps} onChange={(e) => setSteps(e.target.value)} placeholder={"Your left hip is weaker | Hip abduction L 6.5 vs R 9 kg\nYour right foot rolls in more | Heel swing R 25 vs L 7 degrees"} /></div>
+        </div>
+        <div><Label>Running and what to watch for (one point per line; printed in the plan)</Label><Textarea rows={5} value={adviceText} onChange={(e) => setAdvice(e.target.value)} /></div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div><Label>Notes from your clinician (printed)</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
           <div><Label>Next steps (printed)</Label><Textarea value={next} onChange={(e) => setNext(e.target.value)} /></div>
         </div>
         <details className="rounded-lg border p-3 text-sm">
-          <summary className="cursor-pointer font-medium">Edit what each result means (optional, printed in the "What it means" column)</summary>
+          <summary className="cursor-pointer font-medium">Edit what each finding means (optional; picture text from the Assess tab is used when it exists)</summary>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             {shown.map((r) => (
               <div key={r.k}><Label>{r.label}</Label><Textarea className="min-h-12" value={note(`t:${r.k}`, autoNote(r.k))} onChange={(e) => setNoteEdit({ ...noteEdit, [`t:${r.k}`]: e.target.value })} /></div>
@@ -197,9 +298,15 @@ export function ReportPage() {
             {vctx && vctx.rows.map((r) => (
               <div key={r.label}><Label>{r.label}</Label><Textarea className="min-h-12" value={note(`v:${r.label}`, r.note(vctx.latest.data))} onChange={(e) => setNoteEdit({ ...noteEdit, [`v:${r.label}`]: e.target.value })} /></div>
             ))}
+            {vctx && vctx.phases.filter((ph) => sideInfo(ph.id, vctx.latest.data)?.key).map((ph) => (
+              <div key={`k${ph.id}`}><Label>{ph.label} (key finding, printed on its picture card)</Label><Textarea className="min-h-16" value={noteEdit[`k:${ph.id}`] ?? sideInfo(ph.id, vctx.latest.data)!.meaning} onChange={(e) => setNoteEdit({ ...noteEdit, [`k:${ph.id}`]: e.target.value })} /></div>
+            ))}
+            {sideRows.map((r) => (
+              <div key={r.id}><Label>{r.label} (left vs right)</Label><Textarea className="min-h-12" value={note(`s:${r.id}`, r.note)} onChange={(e) => setNoteEdit({ ...noteEdit, [`s:${r.id}`]: e.target.value })} /></div>
+            ))}
           </div>
         </details>
-        <p className="text-xs text-muted-foreground">Screening answers, engine reasoning and clinician-only notes are never included. In the print dialog choose "Save as PDF" and turn off headers and footers.</p>
+        <p className="text-xs text-muted-foreground">The text on this page is saved in this browser for this athlete. Screening answers, engine reasoning and clinician-only notes are never included. In the print dialog choose "Save as PDF" and turn off headers and footers.</p>
       </div>
 
       <article className="viz space-y-4 rounded-xl border bg-white p-6 print:rounded-none print:border-0 print:p-0" style={{ color: "var(--viz-ink)" }}>
@@ -281,14 +388,13 @@ export function ReportPage() {
               <section>
                 <h3 className="mb-1 text-sm font-semibold">{compareMode ? "Your tests: baseline and latest" : "Your tests"}</h3>
                 <table className="report-table">
-                  <thead><tr><th>What we tested</th><th className="num">{compareMode ? "Baseline" : "Result"}</th>{compareMode && <><th className="num">Latest</th><th>Change</th></>}<th>What it means</th></tr></thead>
+                  <thead><tr><th>What we tested</th><th className="num">{compareMode ? "Baseline" : "Result"}</th>{compareMode && <><th className="num">Latest</th><th>Change</th></>}</tr></thead>
                   <tbody>
                     {shown.map((r) => (
                       <tr key={r.k}>
                         <td className="font-medium">{r.label}</td>
                         <td className="num whitespace-nowrap font-semibold">{fmt(r, base[r.k])}</td>
                         {compareMode && <><td className="num whitespace-nowrap font-semibold">{fmt(r, cur[r.k])}</td><td className="text-xs">{change(r)}</td></>}
-                        <td className="text-xs leading-snug" style={{ color: "var(--viz-ink2)" }}>{note(`t:${r.k}`, autoNote(r.k))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -300,23 +406,16 @@ export function ReportPage() {
               <section>
                 <h3 className="mb-1 text-sm font-semibold">Your running video</h3>
                 <table className="report-table">
-                  <thead><tr><th>What we looked at</th><th>{vctx.compare ? "Baseline" : "Result"}</th>{vctx.compare && <th>Latest</th>}<th>What it means</th></tr></thead>
-                  <tbody>{vctx.rows.map((r) => <tr key={r.label}><td className="font-medium">{r.label}</td><td className="whitespace-nowrap font-semibold">{cap(r.get(baseA.data))}</td>{vctx.compare && <td className="whitespace-nowrap font-semibold">{cap(r.get(vctx.latest.data))}</td>}<td className="text-xs leading-snug" style={{ color: "var(--viz-ink2)" }}>{note(`v:${r.label}`, r.note(vctx.latest.data))}</td></tr>)}</tbody>
+                  <thead><tr><th>What we looked at</th><th>{vctx.compare ? "Baseline" : "Result"}</th>{vctx.compare && <th>Latest</th>}</tr></thead>
+                  <tbody>{vctx.rows.map((r) => <tr key={r.label}><td className="font-medium">{r.label}</td><td className="whitespace-nowrap font-semibold">{cap(r.get(baseA.data))}</td>{vctx.compare && <td className="whitespace-nowrap font-semibold">{cap(r.get(vctx.latest.data))}</td>}</tr>)}</tbody>
                 </table>
               </section>
             )}
-          </div>
-        )}
-
-        {showInterp && (
-          <div className="space-y-3">
-            <PartHeading n={nInterp} title="What it means" sub="Reading your results" />
-            {interp.trim() && <p className="whitespace-pre-wrap text-sm leading-relaxed">{interp}</p>}
             {sideRows.length > 0 && (
               <section>
                 <h3 className="mb-1 text-sm font-semibold">Left versus right</h3>
                 <table className="report-table">
-                  <thead><tr><th>What we compared</th><th className="num">Left</th><th className="num">Right</th><th style={{ width: "28%" }}>Side by side</th><th>What it means</th></tr></thead>
+                  <thead><tr><th>What we compared</th><th className="num">Left</th><th className="num">Right</th><th style={{ width: "34%" }}>Side by side</th></tr></thead>
                   <tbody>
                     {sideRows.map((r) => (
                       <tr key={r.id}>
@@ -324,7 +423,6 @@ export function ReportPage() {
                         <td className="num whitespace-nowrap font-semibold">{r.lText}</td>
                         <td className="num whitespace-nowrap font-semibold">{r.rText}</td>
                         <td><SideBars l={r.l} r={r.r} /></td>
-                        <td className="text-xs leading-snug" style={{ color: "var(--viz-ink2)" }}>{note(`s:${r.id}`, r.note)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -338,7 +436,45 @@ export function ReportPage() {
                 <ul className="list-disc space-y-0.5 pl-5 text-sm">{otherFindings.map((x) => <li key={x}>{x}</li>)}</ul>
               </section>
             )}
-            {videoFrames && vctx && <RunningFrames ctx={vctx} imgBase={imgBase.data ?? []} imgLast={imgLast.data ?? []} />}
+          </div>
+        )}
+
+        {showInterp && (
+          <div className="space-y-3">
+            <PartHeading n={nInterp} title="What it means" sub="Putting the findings together" />
+            {interp.trim() && <p className="whitespace-pre-wrap text-sm leading-relaxed">{interp}</p>}
+            {hasStory && (
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold">How it fits together</h3>
+                {storyText.trim() && <div className="break-inside-avoid rounded-lg border-l-4 p-3 text-sm leading-relaxed" style={{ borderColor: "var(--viz-brand)", background: "var(--viz-brand-soft)" }}>{storyText}</div>}
+                {stepList.length > 0 && (
+                  <ol>
+                    {stepList.map((st, i) => (
+                      <li key={i} className="flex break-inside-avoid gap-3">
+                        <div className="flex flex-col items-center">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white" style={{ background: "var(--viz-brand)" }}>{i + 1}</span>
+                          {i < stepList.length - 1 && <span className="my-0.5 w-px flex-1" style={{ background: "var(--viz-brand)" }} />}
+                        </div>
+                        <div className="min-w-0 pb-2.5">
+                          <div className="text-sm font-semibold leading-snug">{st.say}</div>
+                          {st.proof && <div className="text-xs leading-snug" style={{ color: "var(--viz-ink2)" }}>Evidence: {st.proof}</div>}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+            )}
+            {groups.map((g) => (
+              <section key={g.title}>
+                <h3 className="mb-1 text-sm font-semibold">{g.title}</h3>
+                <table className="report-table">
+                  <thead><tr><th style={{ width: "24%" }}>Finding</th><th style={{ width: "26%" }}>Result</th><th>What it means</th></tr></thead>
+                  <tbody>{g.items.map((it) => <tr key={it.label}><td className="font-medium">{it.label}</td><td className="font-semibold">{it.result}</td><td className="text-xs leading-snug" style={{ color: "var(--viz-ink2)" }}>{it.meaning}</td></tr>)}</tbody>
+                </table>
+              </section>
+            ))}
+            {videoFrames && vctx && <RunningFrames ctx={vctx} imgBase={imgBase.data ?? []} imgLast={imgLast.data ?? []} meanOf={(ph) => disc[ph]} keyEdit={(ph) => noteEdit[`k:${ph}`]} />}
           </div>
         )}
 
@@ -357,7 +493,7 @@ export function ReportPage() {
             )}
             {inc.plan && program && (
               <section className="space-y-3">
-                <p className="text-sm leading-relaxed">{STRATEGY_PLAIN[program.strategy.key] ?? STRATEGY_LABEL[program.strategy.key]} It runs for {program.durationWeeks} weeks, {program.sessionsPerWeek === 1 ? "one gym session" : program.sessionsPerWeek === 3 ? "three gym sessions" : "two gym sessions"} a week, with lighter weeks built in so your body can adapt.</p>
+                <p className="text-sm leading-relaxed">{strategySentence} It runs for {program.durationWeeks} weeks, {program.sessionsPerWeek === 1 ? "one gym session" : program.sessionsPerWeek === 3 ? "three gym sessions" : "two gym sessions"} a week, with lighter weeks built in so your body can adapt.</p>
                 <div className="break-inside-avoid">
                   <h3 className="mb-1 text-sm font-semibold">Your {program.durationWeeks} weeks at a glance</h3>
                   <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
@@ -370,12 +506,22 @@ export function ReportPage() {
                     ))}
                   </div>
                 </div>
+                {weeksToRace != null && weeksToRace > program.durationWeeks && (
+                  <RaceTimeline gym={program.durationWeeks} total={weeksToRace} date={fmtDate(a.goals.raceDate)} event={event} />
+                )}
+                {adviceList.length > 0 && (
+                  <div className="break-inside-avoid rounded-lg border p-3" style={{ borderColor: "var(--viz-line)" }}>
+                    <h3 className="mb-1 text-sm font-semibold">Running, and what to watch for</h3>
+                    <ul className="list-disc space-y-0.5 pl-5 text-sm">{adviceList.map((x) => <li key={x}>{x}</li>)}</ul>
+                    <p className="mt-1 text-xs" style={{ color: "var(--viz-ink2)" }}>Your running plan is set separately. This plan is the gym work that supports it.</p>
+                  </div>
+                )}
                 {inc.exercises && program.weeks[0] && (
                   <div>
                     <h3 className="mb-1 text-sm font-semibold">Your first week</h3>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {program.weeks[0].sessions.map((sess) => (
-                        <div key={sess.id} className="break-inside-avoid rounded-lg border p-3" style={{ borderColor: "var(--viz-line)" }}>
+                        <div key={sess.id} className="rounded-lg border p-3" style={{ borderColor: "var(--viz-line)" }}>
                           <div className="text-sm font-semibold" style={{ color: "var(--viz-brand)" }}>{sess.name}</div>
                           {sess.focus && <div className="mb-1 text-xs" style={{ color: "var(--viz-ink2)" }}>{sess.focus}</div>}
                           <table className="report-table">
@@ -395,7 +541,9 @@ export function ReportPage() {
                       {program.milestones.map((m, i) => (
                         <li key={m.id} className="flex items-center gap-3">
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white" style={{ background: "var(--viz-brand)" }}>{i + 1}</span>
-                          <span><b>Week {m.week}.</b> {plainMilestone(m, event)}</span>
+                          {/race/i.test(m.label) && a?.goals?.raceDate
+                            ? <span><b>{fmtDate(a.goals.raceDate)}.</b> Race day: {event}{weeksToRace ? ` (about ${weeksToRace} weeks away)` : ""}</span>
+                            : <span><b>Week {m.week}.</b> {plainMilestone(m, event)}</span>}
                         </li>
                       ))}
                     </ol>
@@ -499,22 +647,27 @@ function exDose(e: { sets: number; reps: number; unit: string; perSide: boolean 
   return `${e.sets} × ${e.reps}${unit}${e.perSide ? " each side" : ""}`;
 }
 
-/** Saved video frames, two cards across: pictures on top, what we saw and what it might mean underneath. */
-function RunningFrames({ ctx, imgBase, imgLast }: { ctx: ReturnType<typeof videoCtx>; imgBase: any[]; imgLast: any[] }) {
-  const { compare, latest, phases } = ctx;
+/** Saved video frames: the picture, what we saw and what it means. Findings with a clear left-right gap are marked as key findings and shown first. */
+function RunningFrames({ ctx, imgBase, imgLast, meanOf, keyEdit }: { ctx: ReturnType<typeof videoCtx>; imgBase: any[]; imgLast: any[]; meanOf: (phase: string) => string | undefined; keyEdit: (phase: string) => string | undefined }) {
+  const { compare, latest } = ctx;
+  const info = (id: string) => sideInfo(id, latest.data);
+  const phases = [...ctx.phases].sort((x, y) => Number(!!info(y.id)?.key) - Number(!!info(x.id)?.key));
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-semibold">Your running, frame by frame</h3>
+      <h3 className="text-sm font-semibold">Your running analysis (frame by frame)</h3>
       <div className="grid gap-2 sm:grid-cols-2">
         {phases.map((p) => {
           const b = imgBase.filter((i) => i.phase === p.id);
           const l = compare ? imgLast.filter((i) => i.phase === p.id) : [];
-          const text = [...l, ...b].find((i) => i.discussion)?.discussion;
           const finding = p.finding(latest.data);
+          const si = info(p.id);
+          const key = !!si?.key;
+          const text = key ? (keyEdit(p.id) ?? si!.meaning) : meanOf(p.id);
           const groups = [...(compare && b.length ? [{ label: "Baseline", imgs: b }] : [{ label: "", imgs: b }]), ...(l.length ? [{ label: "Latest", imgs: l }] : [])].filter((g) => g.imgs.length);
           const count = groups.reduce((n, g) => n + g.imgs.length, 0);
           return (
-            <figure key={p.id} className={cn("flex break-inside-avoid gap-2.5 rounded-lg border p-2.5 text-[0.8125rem]", count >= 3 && "sm:col-span-2")} style={{ borderColor: "var(--viz-line)" }}>
+            <figure key={p.id} className={cn("flex break-inside-avoid items-start gap-2.5 rounded-lg border p-2.5 text-[0.8125rem]", (count >= 3 || key) && "sm:col-span-2")}
+              style={key ? { borderColor: "#a35a00", borderWidth: 2, background: "#fdf3e6" } : { borderColor: "var(--viz-line)" }}>
               <div className="flex shrink-0 flex-wrap content-start gap-1.5">
                 {groups.map((g) => (
                   <div key={g.label || "one"} className="space-y-0.5">
@@ -531,10 +684,13 @@ function RunningFrames({ ctx, imgBase, imgLast }: { ctx: ReturnType<typeof video
                 ))}
               </div>
               <div className="min-w-0 space-y-1 leading-snug">
-                <figcaption className="font-semibold" style={{ color: "var(--viz-brand)" }}>{p.label}</figcaption>
+                <figcaption className="flex flex-wrap items-center gap-2 font-semibold" style={{ color: key ? "#a35a00" : "var(--viz-brand)" }}>
+                  {p.label}
+                  {key && <span className="rounded px-1.5 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-white" style={{ background: "#a35a00" }}>Key finding</span>}
+                </figcaption>
+                {si && <div className={key ? "text-sm font-semibold" : ""}>{si.text}</div>}
                 {finding && finding.length > 6 && <div><b>Saw:</b> {finding}.</div>}
-                {text && <div><b>Means:</b> {text}</div>}
-                {sideLine(p.id, latest.data) && <div><b>Left vs right:</b> {sideLine(p.id, latest.data)}</div>}
+                {text && <div><b>What it means:</b> {text}</div>}
               </div>
             </figure>
           );
@@ -545,6 +701,51 @@ function RunningFrames({ ctx, imgBase, imgLast }: { ctx: ReturnType<typeof video
   );
 }
 
+/** A plain sentence that puts the two sides of a finding together, and what it means; key = the gap between the sides is 20% or more. */
+function sideInfo(phase: string, d: any): { text: string; key: boolean; meaning: string } | null {
+  const bio = d.biomechanics ?? {};
+  const pair = (l: unknown, r: unknown) => (typeof l === "number" && typeof r === "number" ? ([l, r] as const) : null);
+  const gap = (p: readonly [number, number]) => Math.abs(p[0] - p[1]) / Math.max(p[0], p[1]);
+  const big = (p: readonly [number, number]) => (p[0] > p[1] ? "left" : "right");
+  const bv = (p: readonly [number, number]) => f1(Math.max(p[0], p[1]));
+  const sv = (p: readonly [number, number]) => f1(Math.min(p[0], p[1]));
+  if (phase === "heel-whip") {
+    const p = pair(bio.heelWhipLeftDeg, bio.heelWhipRightDeg);
+    if (!p) return null;
+    const dirs = [bio.heelWhipLeftDirection, bio.heelWhipRightDirection];
+    const same = dirs[0] && dirs[0] === dirs[1] ? `Both heels swing ${dirs[0]}ly. ` : "";
+    const sd = big(p), small = sd === "left" ? "right" : "left";
+    const dir = bio[sd === "left" ? "heelWhipLeftDirection" : "heelWhipRightDirection"];
+    return {
+      text: `${same}The right foot swings about ${f1(p[1])}° and the left about ${f1(p[0])}° from vertical.`,
+      key: gap(p) >= 0.2,
+      meaning: `Your ${sd} heel swings ${dir ? `${dir}ly ` : ""}much more than your ${small} (about ${bv(p)}° against ${sv(p)}°). This fits a ${sd} foot that rolls inward more as it pushes off, and it is one of the main reasons we think your ${sd} leg is doing more of the work, so that side may take more load through the lower leg. Some heel swing is common in runners, so the difference between your two sides matters more than the size.`,
+    };
+  }
+  if (phase === "heel-eversion") {
+    const p = pair(bio.heelEversionLeftDeg, bio.heelEversionRightDeg);
+    if (!p) return null;
+    const sd = big(p);
+    return {
+      text: `The right heel tilts in about ${f1(p[1])}° and the left about ${f1(p[0])}°.`,
+      key: gap(p) >= 0.2,
+      meaning: `Both heels tilt inward as you load the foot, which is normal, but your ${sd} heel tilts more (about ${bv(p)}° against ${sv(p)}°). A bigger tilt on one side can put more strain on the inner part of the lower leg on that side. No amount of tilt is proven to cause injury, so we use it as one piece of the pattern.`,
+    };
+  }
+  if (phase === "pelvic-drop") {
+    const p = pair(bio.pelvicDropLeftStanceDeg, bio.pelvicDropRightStanceDeg);
+    if (!p) return null;
+    const sd = big(p);
+    return {
+      text: `Standing on the right leg the left side of the pelvis drops about ${f1(p[1])}°; standing on the left leg the right side drops about ${f1(p[0])}°.`,
+      key: gap(p) >= 0.2,
+      meaning: `Your hips dip more when you stand on your ${sd} leg (about ${bv(p)}° against ${sv(p)}°). This can mean the hip and trunk muscles on that standing leg are working harder to keep the pelvis level. Its meaning is debated, so we read it together with your hip strength tests.`,
+    };
+  }
+  return null;
+}
+
+type Finding = { label: string; result: string; meaning: string };
 const f1 = (n: number) => String(Math.round(n * 10) / 10);
 
 /** Picture labels in plain words: heel tilt is shown as the tilt (180 minus the inside angle), pixel heights without the jargon. */
@@ -586,24 +787,102 @@ function SideBars({ l, r }: { l: number | null; r: number | null }) {
   return <div className="space-y-1">{bar(l, "var(--viz-s1)")}{bar(r, "var(--viz-s2)")}</div>;
 }
 
-/** One plain sentence that puts the two sides of a finding together, from the per-side values. */
-function sideLine(phase: string, d: any): string | null {
-  const bio = d.biomechanics ?? {};
-  const pair = (l: unknown, r: unknown) => (typeof l === "number" && typeof r === "number" ? [l, r] as const : null);
-  if (phase === "heel-whip") {
-    const p = pair(bio.heelWhipLeftDeg, bio.heelWhipRightDeg);
-    if (!p) return null;
-    const dirs = [bio.heelWhipLeftDirection, bio.heelWhipRightDirection];
-    const same = dirs[0] && dirs[0] === dirs[1] ? `Both heels swing ${dirs[0]}ly. ` : "";
-    return `${same}The right foot swings about ${f1(p[1])}° and the left about ${f1(p[0])}° from vertical.`;
+/** From now to race day: the gym block, the weeks after it, the taper and the race. */
+function RaceTimeline({ gym, total, date, event }: { gym: number; total: number; date: string; event: string }) {
+  const taper = Math.min(2, Math.max(1, total - gym));
+  const middle = Math.max(0, total - gym - taper);
+  const seg = (weeks: number, bg: string, color: string, title: string, sub: string, border?: string) => (
+    <div className="rounded-md p-2 text-center" style={{ flex: `${Math.max(weeks, 1.4)} 1 0`, background: bg, color, border: border ? `1px solid ${border}` : undefined }}>
+      <div className="text-[0.6875rem] font-semibold leading-tight">{title}</div>
+      <div className="text-[0.625rem] leading-tight opacity-90">{sub}</div>
+    </div>
+  );
+  return (
+    <div className="break-inside-avoid">
+      <h3 className="mb-1 text-sm font-semibold">From now to race day ({total} weeks)</h3>
+      <div className="flex gap-1">
+        {seg(gym, "var(--viz-brand)", "#fff", `Weeks 1-${gym}`, "Gym block")}
+        {middle > 0 && seg(middle, "var(--viz-brand-soft)", "var(--viz-ink)", `Weeks ${gym + 1}-${gym + middle}`, "Next block, chosen at your week-" + gym + " retest", "var(--viz-brand)")}
+        {seg(taper, "var(--viz-tint)", "var(--viz-ink)", `Last ${taper} week${taper > 1 ? "s" : ""}`, "Taper: less volume, same effort", "var(--viz-line)")}
+        <div className="rounded-md p-2 text-center" style={{ flex: "0 0 4.5rem", background: "#a35a00", color: "#fff" }}>
+          <div className="text-[0.6875rem] font-semibold leading-tight">Race day</div>
+          <div className="text-[0.625rem] leading-tight">{date}</div>
+        </div>
+      </div>
+      <p className="mt-1 text-xs" style={{ color: "var(--viz-ink2)" }}>The weeks after the first block depend on how the {event.toLowerCase()} build is going, so we decide them together at the week-{gym} retest.</p>
+    </div>
+  );
+}
+
+/** Suggested running guidance. Pain rules appear only when a pain site was recorded. The clinician can edit all of it. */
+function defaultAdvice(a: any, d: any): string {
+  const out: string[] = [];
+  const site = a?.health?.painSite;
+  if (site && site !== "none") {
+    out.push("Run at a level where any pain stays at or below 3 out of 10 and settles within 24 hours.");
+    out.push("If pain goes above 3 out of 10, or is still there the next day, shorten or skip your next run and let us know.");
+    out.push("Contact us promptly if you get pain at night, pain when walking, or a spot on the bone that is very tender to press.");
   }
-  if (phase === "heel-eversion") {
-    const p = pair(bio.heelEversionLeftDeg, bio.heelEversionRightDeg);
-    return p ? `The right heel tilts in about ${f1(p[1])}° and the left about ${f1(p[0])}°.` : null;
+  out.push("Build your weekly distance gradually, by no more than about 10% from one week to the next.");
+  out.push("Do your gym session at least 6 hours away from a hard run, and keep the run after it easy.");
+  if (typeof (d?.biomechanics?.cadenceSpm ?? a?.biomechanics?.cadenceSpm) === "number") out.push("Optional: try a slightly quicker step rate (5 to 10% more steps per minute) on easy runs. It lowers the load on each step.");
+  const text = `${a?.visit?.reason ?? ""} ${a?.visit?.otherFindings ?? ""}`;
+  if (/toe/i.test(text)) out.push("Check that your running shoes leave about a thumb's width in front of your longest toe, especially on the side where you lose toenails.");
+  return out.join("\n");
+}
+
+/** A first draft of the story: the weaker side, how the stronger side compensates, and how the evidence lines up. Every line is editable. */
+function draftStory(d: any, reason: string): { explanation: string; steps: string[] } {
+  const ph = d.physical ?? {}, bio = d.biomechanics ?? {};
+  const num = (v: unknown) => (typeof v === "number" ? v : null);
+  const pctGap = (x: number, y: number) => Math.round((Math.abs(x - y) / Math.max(x, y)) * 100);
+  const side = (l: number, r: number, higher: boolean) => (higher ? (l > r ? "left" : "right") : (l < r ? "left" : "right"));
+  const other = (sd: string) => (sd === "left" ? "right" : "left");
+  const steps: string[] = [];
+
+  const hipL = num(ph.hipAbductionLeftKg), hipR = num(ph.hipAbductionRightKg);
+  const calfL = num(ph.calfRaiseLeftReps), calfR = num(ph.calfRaiseRightReps);
+  let weak: "left" | "right" | null = null;
+  if (hipL != null && hipR != null && pctGap(hipL, hipR) >= 10) {
+    weak = side(hipL, hipR, false);
+    steps.push(`Your ${weak} hip muscles that lift the leg out to the side are weaker | Hip abduction ${weak} ${weak === "left" ? hipL : hipR} kg vs ${other(weak)} ${weak === "left" ? hipR : hipL} kg (about ${pctGap(hipL, hipR)}% lower on the ${weak})`);
+  } else if (calfL != null && calfR != null && pctGap(calfL, calfR) >= 10) {
+    weak = side(calfL, calfR, false);
   }
-  if (phase === "pelvic-drop") {
-    const p = pair(bio.pelvicDropLeftStanceDeg, bio.pelvicDropRightStanceDeg);
-    return p ? `Standing on the right leg the left side of the pelvis drops about ${f1(p[1])}°; standing on the left leg the right side drops about ${f1(p[0])}°.` : null;
+  const strong = weak ? other(weak) : null;
+
+  const lines = String(d.visit?.otherFindings ?? "").split("\n").map((x: string) => x.trim()).filter(Boolean);
+  const squat = lines.filter((x) => /squat|shift/i.test(x));
+  if (squat.length) steps.push(`Under load your body favours the ${strong ?? "stronger"} side | ${squat.join("; ")}`);
+  const push = lines.filter((x) => /push|toe/i.test(x) && !/squat|shift/i.test(x));
+
+  const wL = num(bio.heelWhipLeftDeg), wR = num(bio.heelWhipRightDeg), eL = num(bio.heelEversionLeftDeg), eR = num(bio.heelEversionRightDeg);
+  const wBig = wL != null && wR != null && pctGap(wL, wR) >= 20 ? side(wL, wR, true) : null;
+  const eBig = eL != null && eR != null && pctGap(eL, eR) >= 20 ? side(eL, eR, true) : null;
+  const big = wBig ?? eBig;
+  if (big) {
+    const bits: string[] = [];
+    if (wBig && wL != null && wR != null) bits.push(`heel swing at toe-off ${big} ${big === "left" ? wL : wR}° vs ${other(big)} ${big === "left" ? wR : wL}° from vertical${bio[big === "left" ? "heelWhipLeftDirection" : "heelWhipRightDirection"] ? ` (${bio[big === "left" ? "heelWhipLeftDirection" : "heelWhipRightDirection"]})` : ""}`);
+    if (eBig && eL != null && eR != null) bits.push(`heel tilt at mid-stance ${big} ${big === "left" ? eL : eR}° vs ${other(big)} ${big === "left" ? eR : eL}°`);
+    steps.push(`Your ${big} foot rolls in more as you land and push off | ${bits.join("; ")}`);
   }
-  return null;
+
+  const pL = num(bio.pelvicDropLeftStanceDeg), pR = num(bio.pelvicDropRightStanceDeg);
+  if (pL != null && pR != null && pctGap(pL, pR) >= 20) {
+    const sd = side(pL, pR, true);
+    steps.push(`Your hips dip more when you stand on your ${sd} leg | Pelvic drop standing on the ${sd} leg ${sd === "left" ? pL : pR}° vs ${other(sd)} ${sd === "left" ? pR : pL}°`);
+  }
+  // Consequences: what the uneven load probably explains in how the athlete feels and runs.
+  if (push.length && weak) steps.push(`That is probably why you cannot push off well through your ${weak} foot | ${push.join("; ")}`);
+  if (calfL != null && calfR != null) {
+    const calfWords = /calf|tight/i.test(reason) ? `; you told us: ${reason.split(/(?<=[.!?])\s/).filter((x) => /calf|tight/i.test(x)).join(" ").trim() || reason}` : "";
+    steps.push(`That is probably why your calves tire early in a run, then ease as you warm up | Calf raises left ${calfL} vs right ${calfR}${ph.sebtAsymmetryCm != null ? `; balance reach differs by ${ph.sebtAsymmetryCm} cm between legs` : ""}${calfWords}`);
+  }
+  const firstSentence = reason.split(/(?<=[.!?])\s/)[0]?.trim();
+  if (reason) steps.push(`The extra load adds up where the work is concentrated, which fits how you feel | ${firstSentence}`);
+
+  const explanation = weak && strong
+    ? `Our working explanation: your ${weak} side is doing less, so your ${strong} side does more of the work, and that extra load shows up as your symptoms. This is something we are testing with your examination, not a diagnosis.`
+    : "Our working explanation: the findings below point to an uneven load between your two legs. This is something we are testing with your examination, not a diagnosis.";
+  return { explanation, steps };
 }
