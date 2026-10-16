@@ -7,6 +7,18 @@ const triBool = z.boolean().nullable().default(null);
 
 export const PainSite = z.enum(["none", "tibia", "foot", "achilles", "calf", "knee", "hip", "hamstring", "lumbar", "other"]);
 
+const SideExamSchema = z.object({
+  tibialTenderness: z.enum(["none", "diffuse", "focal"]).nullable().default(null),
+  hopPain: triBool,
+  trendelenburg: z.enum(["negative", "positive"]).nullable().default(null),
+  singleLegSquat: z.enum(["good", "fair", "poor"]).nullable().default(null),
+  singleLegStanceEyesOpenSec: z.number().min(0).max(600).nullable().default(null),
+  singleLegStanceEyesClosedSec: z.number().min(0).max(600).nullable().default(null),
+  ankleDorsiflexionCm: z.number().min(0).max(30).nullable().default(null),
+  firstToeExtensionDeg: z.number().min(0).max(120).nullable().default(null),
+  hipInternalRotationDeg: z.number().min(0).max(120).nullable().default(null),
+}).default({});
+
 export const AssessmentSchema = z.object({
   profile: z.object({
     name: z.string().min(1),
@@ -95,6 +107,18 @@ export const AssessmentSchema = z.object({
   visit: z.object({
     reason: z.string().default(""),
     otherFindings: z.string().default(""),
+  }).default({}),
+  exam: z.object({
+    symptomSide: z.enum(["left", "right", "both"]).nullable().default(null),
+    painNow: z.number().min(0).max(10).nullable().default(null),
+    painDuringRun: z.number().min(0).max(10).nullable().default(null),
+    painAfterRun: z.number().min(0).max(10).nullable().default(null),
+    settlesWithin24h: triBool,
+    nightPain: triBool,
+    painWalking: triBool,
+    left: SideExamSchema,
+    right: SideExamSchema,
+    notes: z.string().default(""),
   }).default({}),
 });
 

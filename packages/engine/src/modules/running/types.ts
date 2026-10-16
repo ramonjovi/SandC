@@ -89,6 +89,43 @@ export interface PhysicalTests {
   notes: string;
 }
 
+/** Clinical exam findings for one side. All optional: the clinician records what was examined. */
+export interface SideExam {
+  /** Palpation along the tibia on this side. */
+  tibialTenderness?: "none" | "diffuse" | "focal" | null;
+  /** Pain on a single-leg hop on this side. */
+  hopPain?: boolean | null;
+  /** Standing on this leg: pelvis drops on the opposite side. */
+  trendelenburg?: "negative" | "positive" | null;
+  /** Observed quality of a single-leg squat on this side. */
+  singleLegSquat?: "good" | "fair" | "poor" | null;
+  singleLegStanceEyesOpenSec?: number | null;
+  singleLegStanceEyesClosedSec?: number | null;
+  /** Weight-bearing knee-to-wall distance (cm). */
+  ankleDorsiflexionCm?: number | null;
+  /** First toe (big toe) extension range under load or passive (degrees). */
+  firstToeExtensionDeg?: number | null;
+  hipInternalRotationDeg?: number | null;
+}
+
+/** Symptom pattern, bone-stress screen and the structured left/right examination. */
+export interface Exam {
+  /** Which side the symptoms are on. */
+  symptomSide?: "left" | "right" | "both" | null;
+  /** Pain ratings, 0-10. */
+  painNow?: number | null;
+  painDuringRun?: number | null;
+  painAfterRun?: number | null;
+  /** Does the pain settle within 24 hours of a run? */
+  settlesWithin24h?: boolean | null;
+  /** Bone-stress screen (athlete-level). */
+  nightPain?: boolean | null;
+  painWalking?: boolean | null;
+  left?: SideExam;
+  right?: SideExam;
+  notes?: string;
+}
+
 export interface RunnerAssessment {
   profile: RunnerProfile;
   goals: RunnerGoals;
@@ -100,6 +137,8 @@ export interface RunnerAssessment {
   physical: PhysicalTests;
   /** Reason for the visit and other clinician findings that have no field of their own (shown in the athlete report). */
   visit?: { reason: string; otherFindings: string };
+  /** Symptom side, bone-stress screen and left/right exam. */
+  exam?: Exam;
 }
 
 export interface RunnerProgramOpts {

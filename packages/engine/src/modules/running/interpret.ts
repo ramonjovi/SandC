@@ -65,6 +65,8 @@ export function computeMetrics(a: RunnerAssessment): Metrics {
   const l = ph.calfRaiseLeftReps, r = ph.calfRaiseRightReps;
   m.calfRaiseAvg = l != null && r != null ? round1((l + r) / 2) : l ?? r ?? null;
   m.calfRaiseAsymPct = l != null && r != null && Math.max(l, r) > 0 ? round1((Math.abs(l - r) / Math.max(l, r)) * 100) : null;
+  const hl = ph.hipAbductionLeftKg, hr = ph.hipAbductionRightKg;
+  m.hipAbductionAsymPct = hl != null && hr != null && Math.max(hl, hr) > 0 ? round1((Math.abs(hl - hr) / Math.max(hl, hr)) * 100) : null;
   m.rsi = ph.rsiFlightMs != null && ph.rsiContactMs ? round2(ph.rsiFlightMs / ph.rsiContactMs) : null;
   m.nordicBreakAngleDeg = ph.nordicBreakAngleDeg ?? null;
   m.cadenceSpm = b.cadenceSpm;
@@ -83,6 +85,14 @@ export function interpretRunner(a: RunnerAssessment, params: Params = defaultPar
   const pri: Array<Priority & { score: number }> = [];
   const addPri = (key: string, score: number, rationale: string, ruleIds: string[]) => {
     ruleIds.forEach((r) => used.add(r));
+    // The same priority can be raised by several findings: keep one entry, with the strongest reason first and every rule listed.
+    const prev = pri.find((p) => p.key === key);
+    if (prev) {
+      if (score > prev.score) { prev.rationale = `${rationale} Also: ${prev.rationale}`; prev.score = score; }
+      else if (!prev.rationale.includes(rationale)) prev.rationale = `${prev.rationale} Also: ${rationale}`;
+      prev.ruleIds = [...new Set([...prev.ruleIds, ...ruleIds])];
+      return;
+    }
     pri.push({ key, label: LABEL[key], rank: 0, rationale, ruleIds, score });
   };
 
@@ -108,6 +118,57 @@ export function interpretRunner(a: RunnerAssessment, params: Params = defaultPar
     restrictions.push({ site: "other", text: SITE_EXCLUSIONS.other.text });
     safetyFlags.push({ id: "amssm-pain", text: "AMSSM injury criterion met but no site recorded; plyometrics removed until a site is entered.", highStakes: false, ruleIds: ["running.screen.amssm"] });
     used.add("running.screen.amssm");
+  }
+
+  /* ---- symptom pattern, bone-stress screen, left/right exam ---- */
+  const ex = a.exam ?? {};
+  const sideName = (s?: string | null) => (s === "left" ? "left" : s === "right" ? "right" : s === "both" ? "both sides" : null);
+  const symSide = sideName(ex.symptomSide);
+  const pains = [
+    ex.painNow != null ? `now ${ex.painNow}/10` : null,
+    ex.painDuringRun != null ? `during a run ${ex.painDuringRun}/10` : null,
+    ex.painAfterRun != null ? `after a run ${ex.painAfterRun}/10` : null,
+  ].filter(Boolean);
+  if (symSide || pains.length || ex.settlesWithin24h != null) {
+    findings.push({
+      id: "symptoms", domain: "Symptoms", severity: ex.settlesWithin24h === false || (ex.painDuringRun ?? 0) > 3 || (ex.painAfterRun ?? 0) > 3 ? "attention" : "info",
+      text: `Symptom side: ${symSide ?? "not recorded"}${hs.painSite !== "none" ? ` (${hs.painSite})` : ""}. Pain ${pains.length ? pains.join(", ") : "ratings not recorded"}${ex.settlesWithin24h == null ? "" : `; ${ex.settlesWithin24h ? "settles" : "does not settle"} within 24 hours`}. Pain is a poor indicator of tissue repair, so it is recorded, not used to clear anyone.`,
+      ruleIds: ["running.exam.record"],
+    });
+    used.add("running.exam.record");
+  }
+  const L = ex.left ?? {}, R = ex.right ?? {};
+  const boneBits: string[] = [];
+  if (L.tibialTenderness === "focal" || R.tibialTenderness === "focal") boneBits.push(`focal tibial tenderness (${[L.tibialTenderness === "focal" ? "left" : null, R.tibialTenderness === "focal" ? "right" : null].filter(Boolean).join(" and ")})`);
+  if (L.hopPain || R.hopPain) boneBits.push(`pain on single-leg hop (${[L.hopPain ? "left" : null, R.hopPain ? "right" : null].filter(Boolean).join(" and ")})`);
+  if (ex.nightPain) boneBits.push("night pain");
+  if (ex.painWalking) boneBits.push("pain on walking");
+  if (boneBits.length) {
+    safetyFlags.push({
+      id: "bone-stress-screen",
+      text: `Bone-stress screen positive: ${boneBits.join(", ")}. Consider a bone stress injury until a clinician has reviewed it; imaging (MRI or bone scan, as X-rays often miss it) is a clinician decision. Heavy axial loading and plyometrics are removed from the program until reviewed. The engine does not diagnose or clear.`,
+      highStakes: true, ruleIds: ["running.screen.bone-stress", "core.screening.no-auto-clearance"],
+    });
+    used.add("running.screen.bone-stress");
+    const site = hs.painSite !== "none" ? hs.painSite : (L.tibialTenderness === "focal" || R.tibialTenderness === "focal") ? "tibia" : "other";
+    if (!restrictions.some((r) => r.site === site)) restrictions.push({ site, text: SITE_EXCLUSIONS[site].text });
+  } else if ((hs.painSite === "tibia" || ex.symptomSide) && !(ex.nightPain === false && ex.painWalking === false) && L.tibialTenderness == null && R.tibialTenderness == null) {
+    missing.push("Bone-stress screen not completed (tibial palpation, single-leg hop pain, night pain, pain on walking). Complete it before heavy or impact loading when the shin hurts.");
+  }
+  const exSides: Array<[string, string, number | null | undefined, number | null | undefined, string]> = [
+    ["ankle-df", "Ankle dorsiflexion (knee to wall)", L.ankleDorsiflexionCm, R.ankleDorsiflexionCm, "cm"],
+    ["first-toe", "First-toe extension", L.firstToeExtensionDeg, R.firstToeExtensionDeg, "deg"],
+    ["stance-eo", "Single-leg stance, eyes open", L.singleLegStanceEyesOpenSec, R.singleLegStanceEyesOpenSec, "s"],
+    ["stance-ec", "Single-leg stance, eyes closed", L.singleLegStanceEyesClosedSec, R.singleLegStanceEyesClosedSec, "s"],
+    ["hip-ir", "Hip internal rotation", L.hipInternalRotationDeg, R.hipInternalRotationDeg, "deg"],
+  ];
+  const exParts = exSides.filter(([, , l, r]) => l != null || r != null).map(([, label, l, r, u]) => `${label} L ${l ?? "-"} / R ${r ?? "-"} ${u}`);
+  const qual: string[] = [];
+  if (L.trendelenburg || R.trendelenburg) qual.push(`Trendelenburg L ${L.trendelenburg ?? "-"} / R ${R.trendelenburg ?? "-"}`);
+  if (L.singleLegSquat || R.singleLegSquat) qual.push(`single-leg squat L ${L.singleLegSquat ?? "-"} / R ${R.singleLegSquat ?? "-"}`);
+  if (exParts.length || qual.length) {
+    findings.push({ id: "exam-sides", domain: "Examination", severity: "info", text: `Left/right exam: ${[...exParts, ...qual].join("; ")}. No validated cut-off is applied: the differences are for the clinician to interpret.`, ruleIds: ["running.exam.record"] });
+    used.add("running.exam.record");
   }
 
   /* ---- baseline performance ---- */
@@ -199,7 +260,25 @@ export function interpretRunner(a: RunnerAssessment, params: Params = defaultPar
     findings.push({ id: "calf-asym", domain: "Physical capacity", severity: calfLow ? "attention" : "info", text: `Single-leg calf raise L ${ph.calfRaiseLeftReps} / R ${ph.calfRaiseRightReps} reps (${m.calfRaiseAsymPct}% difference).`, data: { calfRaiseAsymPct: m.calfRaiseAsymPct as number }, ruleIds: ["running.symmetry"] });
     used.add("running.symmetry");
   }
-  if (asym) addPri("unilateral_symmetry", 75, "Side-to-side difference exceeds the default flag; add an extra set on the weaker side.", ["running.symmetry"]);
+  // Hip abduction (dynamometer) asymmetry
+  const hipFlag = params.get("running.symmetry", "hipPct");
+  const hipAsym = m.hipAbductionAsymPct as number | null;
+  const hipHigh = hipAsym != null && hipAsym > hipFlag;
+  if (hipAsym != null) {
+    const weakHip = (ph.hipAbductionLeftKg as number) < (ph.hipAbductionRightKg as number) ? "left" : "right";
+    findings.push({
+      id: "hip-abd-asym", domain: "Physical capacity", severity: hipHigh ? "attention" : "info",
+      text: `Hip abduction (dynamometer) L ${ph.hipAbductionLeftKg} / R ${ph.hipAbductionRightKg} kg (${hipAsym}% difference${hipHigh ? `, ${weakHip} weaker; default flag >${hipFlag}%` : ""}).${hipHigh && symSide && symSide !== "both sides" ? ` The weaker side is ${weakHip === symSide ? "the same side as" : "the opposite side to"} the symptoms: a pattern to test, not a conclusion.` : ""}`,
+      data: { hipAbductionAsymPct: hipAsym }, ruleIds: ["running.symmetry"],
+    });
+    used.add("running.symmetry");
+    if (hipHigh) addPri("hip_stability", 82, `Hip abduction is ${hipAsym}% weaker on the ${weakHip} side (default flag >${hipFlag}%): unilateral hip strength and control.`, ["running.symmetry"]);
+  }
+  if (L.trendelenburg === "positive" || R.trendelenburg === "positive" || L.singleLegSquat === "poor" || R.singleLegSquat === "poor") {
+    addPri("hip_stability", 84, "Positive Trendelenburg or poor single-leg squat recorded on examination: hip and pelvic control is a priority.", ["running.exam.record"]);
+    used.add("running.exam.record");
+  }
+  if (asym || hipHigh) addPri("unilateral_symmetry", 75, "Side-to-side difference exceeds the default flag; add an extra set on the weaker side.", ["running.symmetry"]);
 
   /* ---- biomechanics: observations only ---- */
   used.add("running.gait.observation");

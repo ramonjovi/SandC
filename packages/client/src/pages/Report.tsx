@@ -415,7 +415,7 @@ export function ReportPage() {
               <section>
                 <h3 className="mb-1 text-sm font-semibold">Left versus right</h3>
                 <table className="report-table">
-                  <thead><tr><th>What we compared</th><th className="num">Left</th><th className="num">Right</th><th style={{ width: "34%" }}>Side by side</th></tr></thead>
+                  <thead><tr><th>What we compared</th><th className="num">Left{sideData?.exam?.symptomSide === "left" ? " (hurts)" : ""}</th><th className="num">Right{sideData?.exam?.symptomSide === "right" ? " (hurts)" : ""}</th><th style={{ width: "34%" }}>Side by side</th></tr></thead>
                   <tbody>
                     {sideRows.map((r) => (
                       <tr key={r.id}>
@@ -776,6 +776,11 @@ function buildSideRows(d: any): SideRow[] {
   add("hip", "Hip abduction strength", ph.hipAbductionLeftKg, ph.hipAbductionRightKg, " kg", true, "The muscles that lift the leg out to the side keep your pelvis level on one leg. A weaker side is less able to do that. There is no validated runner norm, so we track change.");
   add("pdrop", "Pelvic drop when standing on that leg", bio.pelvicDropLeftStanceDeg, bio.pelvicDropRightStanceDeg, "°", false, "A bigger dip while standing on one leg is a clue to hip and trunk control on that side. Its meaning is debated.");
   add("whip", "Heel swing at toe-off (from vertical)", bio.heelWhipLeftDeg, bio.heelWhipRightDeg, "°", false, "Direction matters as well as size: medial means the heel swings toward the other leg. It is common and of low importance on its own.", bio.heelWhipLeftDirection ? ` ${bio.heelWhipLeftDirection}` : "", bio.heelWhipRightDirection ? ` ${bio.heelWhipRightDirection}` : "");
+  const ex = d.exam ?? {};
+  add("stance-eo", "Single-leg stance, eyes open", ex.left?.singleLegStanceEyesOpenSec, ex.right?.singleLegStanceEyesOpenSec, " s", true, "How long you can balance on one leg. A shorter time on one side points to less control there. Tracked against your own retest.");
+  add("stance-ec", "Single-leg stance, eyes closed", ex.left?.singleLegStanceEyesClosedSec, ex.right?.singleLegStanceEyesClosedSec, " s", true, "With the eyes closed the body relies more on joint position sense and hip control. Tracked against your own retest.");
+  add("ankle-df", "Ankle bend (knee to wall)", ex.left?.ankleDorsiflexionCm, ex.right?.ankleDorsiflexionCm, " cm", true, "How far the ankle bends forward. Less on one side can change how the foot and shin take load.");
+  add("first-toe", "Big toe extension", ex.left?.firstToeExtensionDeg, ex.right?.firstToeExtensionDeg, "°", true, "The big toe needs to bend upward for the foot to roll over it at push-off. Less on one side can push the load onto the toe tips.");
   add("evers", "Heel tilt at mid-stance", bio.heelEversionLeftDeg, bio.heelEversionRightDeg, "°", false, "Some inward tilt is normal. A bigger tilt on one side can load the inner shin more, but no amount is proven to cause injury.");
   return rows;
 }

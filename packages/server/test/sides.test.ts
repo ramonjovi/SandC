@@ -31,4 +31,17 @@ describe("left/right findings and reason for visit", () => {
     const p = { ...SYNTHETIC_ALEX.physical, hipAbductionLeftKg: 6.5, hipAbductionRightKg: 9 };
     expect(running.retestList(p)).toContain("Hip abduction (dynamometer)");
   });
+
+  it("keeps the symptom side, bone-stress screen and per-side exam, and rejects bad values", () => {
+    const input = structuredClone(SYNTHETIC_ALEX) as any;
+    input.exam = { symptomSide: "right", painDuringRun: 3, settlesWithin24h: true, nightPain: false, left: { trendelenburg: "negative" }, right: { tibialTenderness: "diffuse", hopPain: false, ankleDorsiflexionCm: 9, singleLegSquat: "poor" } };
+    const out = parseAssessment(input);
+    expect(out.exam?.symptomSide).toBe("right");
+    expect(out.exam?.right?.tibialTenderness).toBe("diffuse");
+    expect(out.exam?.right?.ankleDorsiflexionCm).toBe(9);
+    input.exam = { painNow: 11 };
+    expect(() => parseAssessment(input)).toThrow();
+    input.exam = { left: { tibialTenderness: "sore" } };
+    expect(() => parseAssessment(input)).toThrow();
+  });
 });

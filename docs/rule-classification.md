@@ -71,3 +71,17 @@ Method: the REDs consensus table and figure, and the book/paper text, were read 
 | Treadmill gait video | Souza 2016: speed = the symptomatic speed, or long-run pace for a healthy runner (**not race pace** as the knowledge file said); 6-10 min settling; two orthogonal views (side, rear); >=120 Hz phone is adequate; fixed, reproducible camera position; film fatigued if symptoms appear later. **Source-verified.** |
 | CMJ height from phone video, broad jump, pogo-hop RSI, calf-raise tempo, SEBT taping, Nordic break angle | No standardised procedure in the supplied texts. Proposed clinic standards, labelled **needs verification**; tracked against the athlete's own baseline, never against a norm. |
 | Force plate (IMTP, CMJ force, DSI) | Optional. Without it the engine uses the squat strength ratio, then target speed. |
+
+## Fourth pass (2026-10-16): symptom pattern, bone-stress screen and left/right exam
+
+Read against the Resource folder (Souza 2016; High-Performance Training for Sports ch. 1 and 27; NSCA Developing Endurance injury section and Table 8.12; IOC load and REDs papers).
+
+| Item | What the sources say | Status / action |
+| --- | --- | --- |
+| Bone-stress screen (focal tenderness, hop pain, night pain, pain walking) | Developing Endurance: a stress fracture is an overuse injury; foot or shin pain that persists as mileage rises may be one, and X-rays often miss it (bone scan or MRI). The REDs consensus lists bone stress injury as an indicator. The **individual screen items are clinical convention**, not in the books. | New rule `running.screen.bone-stress`, **needs verification**. Positive screen = high-stakes review flag plus site restrictions (no heavy axial loading or plyometrics). Never diagnoses or clears. |
+| Left/right exam fields (Trendelenburg, single-leg squat, single-leg stance, ankle dorsiflexion, first-toe extension, hip rotation, palpation) | Souza: video complements the history and a thorough physical exam; look for side-to-side differences. High-Performance ch. 27: compare with the other side, within 10% as a limb-test threshold; pain is a poor indicator of repair. **No validated runner cut-offs exist in the sources.** | New rule `running.exam.record`, **proposed default**. Recorded and compared, no cut-off applied; positive Trendelenburg or poor single-leg squat adds hip control as a priority. |
+| Hip abduction (dynamometer) asymmetry flag | NSCA Essentials: differences under 10% may be acceptable (return-to-sport); NSCA Program Design: 15% or more may indicate higher risk, debated. No dynamometer norms for runners. | Added `hipPct` (10%, editable) to `running.symmetry`, still **needs verification**. |
+| Symptom side and 0-10 pain ratings | High-Performance ch. 27: pain is a poor indicator of repair. The "3 out of 10 and settles within 24 hours" rule used in athlete guidance is a common convention, not in the sources. | Recorded; not used to clear. |
+
+Not yet in the app, found in the Resource folder: trunk lean and foot progression angle (Souza), tibia-angle category and knee excursion, treadmill sound and shake, video set-up record (speed, frame rate, acclimation, fatigued state), the Developing Endurance injury-risk checklist (sleep, shoe age, footwear change, stress, previous injury), pre-program load history, trial-level data for typical error and smallest worthwhile change (High-Performance ch. 1), and return-to-run exit criteria (High-Performance ch. 27).
+
